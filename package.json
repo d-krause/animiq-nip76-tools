@@ -1,0 +1,40 @@
+{
+  "name": "animiq-nip76-tools",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "webpack --mode=production --node-env=production",
+    "build:dev": "webpack --mode=development",
+    "build:prod": "webpack --mode=production --node-env=production",
+    "watch": "webpack --watch"
+  },
+  "keywords": [],
+  "author": "d-krause",
+  "license": "ISC",
+  "description": "My webpack project",
+  "dependencies": {
+    "@noble/secp256k1": "^1.7.1",
+    "@scure/base": "^1.1.1",
+    "base32": "^0.0.7",
+    "bs58": "^5.0.0",
+    "buffer": "^6.0.3",
+    "crypto-browserify": "^3.12.0",
+    "nostr-tools": "^1.7.4",
+    "stream-browserify": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.14.4",
+    "@types/webpack": "^5.28.0",
+    "@webpack-cli/generators": "^3.0.1",
+    "clean-webpack-plugin": "^4.0.0",
+    "copy-webpack-plugin": "^11.0.0",
+    "declaration-bundler-webpack-plugin": "^1.0.3",
+    "esbuild": "^0.17.10",
+    "ts-loader": "^9.4.2",
+    "typescript": "^4.9.5",
+    "webpack": "^5.75.0",
+    "webpack-cli": "^5.0.1",
+    "wepack-cli": "^0.0.1-security"
+  }
+}
