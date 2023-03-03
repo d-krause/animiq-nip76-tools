@@ -5,9 +5,7 @@
  * Written by Dave Krause <dkrause@keplergroupsystems.com>, February 2019
  */
 import { Buffer } from 'buffer';
-declare var require: any; // needed for browser
-const crypto = require('crypto');
-// import * as crypto from 'crypto-browserify';
+import * as crypto from 'crypto';
 import { sha256 } from '../util';
 import { HDKey, Versions } from '../keys';
 import { ProfileDocument, ProfileKeySet } from '../content';
@@ -62,10 +60,6 @@ export class Wallet {
             this.master = HDKey.parseExtendedKey(params.storage.k);
             this.setLockword(params.storage.l || '');
         }
-    }
-
-    static getInstance() {
-        return new Wallet();
     }
 
     reKey(): void {
@@ -187,7 +181,8 @@ export class Wallet {
             throw new Error('Master private key needed before setLockword().');
         }
         this.lockword = word;
-        this.aqroot = this.master.derive(`m/1776'/07'/04'`);
+        this.aqroot = this.master.derive(`m/44'/1237'/0'`);
+        if (!numsOnly) { this.locknums = this.aqroot.createIndexesFromWord(this.lockword); }
         this.aqroot = this.aqroot.derive(`${this.locknums[19]}'/${this.locknums[15]}'/${this.locknums[11]}'/${this.locknums[7]}'`);
         this.pproot = this.aqroot.derive(`${this.locknums[18]}'/${this.locknums[14]}'/${this.locknums[10]}'/${this.locknums[6]}'`);
         this.aproot = this.aqroot.derive(`${this.locknums[17]}'/${this.locknums[13]}'/${this.locknums[9]}'/${this.locknums[5]}'`);

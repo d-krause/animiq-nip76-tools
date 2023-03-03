@@ -5,11 +5,7 @@
  * Written by Dave Krause <dkrause@keplergroupsystems.com>, February 2019
  */
 import { Buffer } from 'buffer';
-declare var require: any; // needed for browser
-const crypto = require('crypto');
-// import * as crypto from 'crypto-browserify';
-
-
+import * as crypto from 'crypto';
 
 export function hmacSha512(key: Buffer, data: Buffer): Buffer {
     return crypto.createHmac('sha512', key).update(data).digest();

@@ -4,14 +4,13 @@
  * The contents of this file are considered proprietary and confidential.
  * Written by Dave Krause <dkrause@keplergroupsystems.com>, February 2019
  */
-// declare var require: any;
-const crypto = require('crypto');
-const Base32 = require('base32');
+import * as crypto from 'crypto';
 import { Buffer } from 'buffer';
 import { sha256, hash160 } from '../util';
 import { Bip32NetworkInfo, Versions } from './Versions';
 import { HDKissDocumentType } from './HDKissDocumentType';
 import * as secp from '@noble/secp256k1';
+import { bytesToString } from '@scure/base'
 
 export interface HDKissAddressConstructorParams {
     publicKey: Buffer;
@@ -135,66 +134,32 @@ export class HDKissAddress {
 
     encrypt(data: string, key: Buffer, version: number): string {
 
-        switch (version) {
-            case 1:
-                {
-                    const encoding = 'base64';
-                    const ecdhA = crypto.createECDH('secp256k1');
-                    ecdhA.generateKeys(encoding, 'compressed');
-                    ecdhA.setPrivateKey(key, encoding);
-                    const secret = ecdhA.computeSecret(this._publicKey, encoding).toString(encoding);
-                    const cipher = crypto.createCipher('aes-256-ctr', secret);
-                    let crypted = cipher.update(data, 'utf8', encoding);
-                    crypted += cipher.final(encoding);
-                    return crypted;
-                }
-            default:
-                {
-                    const iv = sha256(this.publicKey).slice(0, 16);
-                    const secret = key.slice(0, 32);
-                    const cipher = crypto.createCipheriv('aes-256-gcm', secret, iv);
-                    const crypted = cipher.update(data, 'utf8');
-                    const final = cipher.final();
-                    const out = Buffer.concat([cipher.getAuthTag(), crypted, final]);
-                    return out.toString('base64');
-                }
-        }
+        const iv = sha256(this.publicKey).slice(0, 16);
+        const secret = key.slice(0, 32);
+        const cipher = crypto.createCipheriv('aes-256-gcm', secret, iv);
+        const crypted = cipher.update(data, 'utf8');
+        const final = cipher.final();
+        const out = Buffer.concat([cipher.getAuthTag(), crypted, final]);
+        return out.toString('base64');
     }
 
     decrypt(data: string, key: Buffer, version: number): string {
 
         try {
-            switch (version) {
-                case 1:
-                    {
-                        const encoding = 'base64';
-                        const ecdhA = crypto.createECDH('secp256k1');
-                        ecdhA.generateKeys(encoding);
-                        ecdhA.setPrivateKey(key, encoding);
-                        const secret = ecdhA.computeSecret(this.publicKey, encoding).toString(encoding);
-                        const decipher = crypto.createCipher('aes-256-ctr', secret);
-                        let text = decipher.update(data, encoding, 'utf8');
-                        text += decipher.final('utf8');
-                        return text;
-                    }
-                default:
-                    {
-                        const buf = Buffer.from(data, 'base64');
-                        const bdata = buf.slice(16);
-                        const auth = buf.slice(0, 16);
-                        const iv = sha256(this.publicKey).slice(0, 16);
-                        const secret = key.slice(0, 32);
-                        const cipher = crypto.createDecipheriv('aes-256-gcm', secret, iv);
-                        cipher.setAuthTag(auth);
-                        const crypted = cipher.update(bdata, 'utf8');
-                        const final = cipher.final();
-                        const out = Buffer.concat([crypted, final]);
-                        if (out[0] == 123 && out[out.length - 1] == 125) {
-                            return out.toString('utf8');
-                        } else {
-                            return `{ "imageUrl": "${window.URL.createObjectURL(new Blob([out], { type: 'image/png' }))}" }`
-                        }
-                    }
+            const buf = Buffer.from(data, 'base64');
+            const bdata = buf.slice(16) as any;
+            const auth = buf.slice(0, 16);
+            const iv = sha256(this.publicKey).slice(0, 16);
+            const secret = key.slice(0, 32);
+            const cipher = crypto.createDecipheriv('aes-256-gcm', secret, iv);
+            cipher.setAuthTag(auth);
+            const crypted = cipher.update(bdata, 'utf8');
+            const final = cipher.final();
+            const out = Buffer.concat([crypted, final]);
+            if (out[0] == 123 && out[out.length - 1] == 125) {
+                return out.toString('utf8');
+            } else {
+                return `{ "imageUrl": "${window.URL.createObjectURL(new Blob([out], { type: 'image/png' }))}" }`
             }
 
         } catch (e) {
@@ -204,10 +169,7 @@ export class HDKissAddress {
     }
 
     encryptAS(data: Buffer, senderPrivateKey: Buffer, receiverPublicKey: Buffer): string {
-        const ecdhA = crypto.createECDH('secp256k1');
-        const kp = ecdhA.setPrivateKey(senderPrivateKey);
-        const secret = ecdhA.computeSecret(receiverPublicKey, null);
-
+        const secret = secp.getSharedSecret(senderPrivateKey, receiverPublicKey);
         const iv = sha256(this.publicKey).slice(0, 16);
         const cipher = crypto.createCipheriv('aes-256-gcm', secret, iv);
         const crypted = cipher.update(data);
@@ -217,12 +179,9 @@ export class HDKissAddress {
     }
 
     decryptAS(data: string, senderPublicKey: Buffer, receiverPrivateKey: Buffer): Buffer {
-        const ecdhA = crypto.createECDH('secp256k1');
-        const kp = ecdhA.setPrivateKey(receiverPrivateKey);
-        const secret = ecdhA.computeSecret(senderPublicKey, null);
-
+        const secret = secp.getSharedSecret(receiverPrivateKey, senderPublicKey);
         const buf = Buffer.from(data, 'base64');
-        const bdata = buf.slice(16);
+        const bdata = buf.slice(16) as any;
         const auth = buf.slice(0, 16);
         const iv = sha256(this.publicKey).slice(0, 16);
         const cipher = crypto.createDecipheriv('aes-256-gcm', secret, iv);
@@ -259,18 +218,9 @@ export class HDKissAddress {
      */
     get value(): string {
         if (!this._addressValue) {
-            if (this._version === Versions.animiqAPI3) {
-                const base32 = Base32.encode(this.rawAddress.slice(1, 21));
-                const check = ('00' + (98 - HDKissAddress._ibanCheck(base32 + this._type + this._version.networkId + '00'))).slice(-2);
-                this._addressValue = this._type + check + base32;
-            } else {
-                const base32 = Base32.encode(this.rawAddress.slice(0, 20));
-                const check = ('00' + (98 - HDKissAddress._ibanCheck(base32 + this._type + '00'))).slice(-2);
-                this._addressValue = this._type + check + base32;
-            }
-            // if (!HDKissAddress.isValid(this._addressValue, this._version)) {
-            //     console.log(`Address ${this._addressValue} is invalid.`);
-            // } else { console.log('yippee'); }
+            const base32 = bytesToString('base32',this.rawAddress.slice(1, 21))
+            const check = ('00' + (98 - HDKissAddress._ibanCheck(base32 + this._type + this._version.networkId + '00'))).slice(-2);
+            this._addressValue = this._type + check + base32;
         }
         return this._addressValue;
     }

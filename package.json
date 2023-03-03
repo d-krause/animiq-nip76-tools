@@ -16,7 +16,6 @@
   "dependencies": {
     "@noble/secp256k1": "^1.7.1",
     "@scure/base": "^1.1.1",
-    "base32": "^0.0.7",
     "bs58": "^5.0.0",
     "buffer": "^6.0.3",
     "crypto-browserify": "^3.12.0",

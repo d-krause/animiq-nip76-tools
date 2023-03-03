@@ -8,10 +8,11 @@ const config = {
     path: path.resolve(__dirname, "dist"),
     filename: "bundle.js",
     library: {
-      name: "Wallet",
-      type: "umd",  // see https://webpack.js.org/configuration/output/#outputlibrarytype
-      export: "default",  // see https://github.com/webpack/webpack/issues/8480
+      type: "module",  // see https://webpack.js.org/configuration/output/#outputlibrarytype
     },
+  },
+  experiments: {
+    outputModule: true,
   },
   plugins: [
     // Add your plugins here
@@ -36,7 +37,6 @@ const config = {
   resolve: {
     extensions: [".tsx", ".ts", ".jsx", ".js", "..."],
     fallback: {
-      fs: require.resolve('buffer'),
       buffer: require.resolve('buffer'),
       stream: require.resolve('stream-browserify'),
       crypto: require.resolve('crypto-browserify'),

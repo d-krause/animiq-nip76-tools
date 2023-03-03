@@ -39,14 +39,6 @@ export class HDKey {
         if (params.privateKey) {
             this._privateKey = params.privateKey;
             this._publicKey = Buffer.from(secp.schnorr.getPublicKey(params.privateKey));
-            // const ecdh = crypto.createECDH('secp256k1');
-            // if (ecdh['curve'] && ecdh['curve']['keyFromPrivate']) {
-            //     // ECDH is not native, fallback to pure-JS elliptic lib
-            //     this._publicKey = Buffer.from(secp256k1.keyFromPrivate(params.privateKey).getPublic(true, 'hex'), 'hex');
-            // } else {
-            //     ecdh.setPrivateKey(params.privateKey);
-            //     this._publicKey = Buffer.from(ecdh.getPublicKey('latin1', 'compressed'), 'latin1');
-            // }
         } else if (params.publicKey) {
             this._publicKey = params.publicKey;
         }
@@ -209,11 +201,7 @@ export class HDKey {
         if (!this.privateKey && !this.publicKey) {
             throw new Error('either private key or public key must be provided');
         }
-        // if (!secp256k1.n) {
-        //     throw new Error('secp256k1.n required');
-        // }
         let index = childIndex;
-
         const data = Buffer.alloc(37);
         let o = 0;
         if (hardened) {
@@ -233,29 +221,21 @@ export class HDKey {
 
         o += data.writeUInt32BE(index, o);
         const i = hmacSha512(this.chainCode, data);
-        // const iL = new BigNumber(i.slice(0, 32));
-        const iL2 = BigInt('0x' + i.slice(0, 32).toString('hex'));
+        const iL = BigInt('0x' + i.slice(0, 32).toString('hex'));
         const iR = i.slice(32);
-        // if parse256(IL) >= n, the resulting key is invalid; proceed with the next value for i
-        // if (iL.cmp(secp256k1.n) >= 0) {
-        if (iL2 >= secp.CURVE.n) {
+        if (iL >= secp.CURVE.n) {
             return this.deriveChildKey(childIndex + 1, hardened);
         }
         if (this.privateKey) {
             // ki is parse256(IL) + kpar (mod n)
-            // const childKey = iL.add(new BigNumber.BN(this.privateKey)).mod(secp256k1.n);
-            const childKey2 = secp.utils.mod(iL2 + BigInt('0x' + this.privateKey.toString('hex')), secp.CURVE.n);
+            const childKey = secp.utils.mod(iL + BigInt('0x' + this.privateKey.toString('hex')), secp.CURVE.n);
             // if ki = 0, the resulting key is invalid; proceed with the next value for i
-            // if (childKey.cmp(new BigNumber.BN(0)) === 0) {
-            if (childKey2 === 0n) {
+            if (childKey === 0n) {
                 return this.deriveChildKey(childIndex + 1, hardened);
             }
-            // const data1 = childKey.toArrayLike(Buffer, 'be', 32)
-            // const data2 = secp.utils._bigintTo32Bytes(childKey2)
             return new HDKey({
                 depth: this.depth + 1,
-                // privateKey: childKey.toArrayLike(Buffer, 'be', 32),
-                privateKey: Buffer.from(secp.utils._bigintTo32Bytes(childKey2)),
+                privateKey: Buffer.from(secp.utils._bigintTo32Bytes(childKey)),
                 chainCode: iR,
                 parentFingerprint: this.fingerprint,
                 index,
@@ -263,26 +243,16 @@ export class HDKey {
             });
         } else {
             // Ki is point(parse256(IL)) + Kpar = G * IL + Kpar
-            // const parentKey = secp256k1.keyFromPublic(Buffer.concat([Buffer.from([0x02]),this.publicKey])).getPublic();
-            // const childKey = secp256k1.g.mul(iL).add(parentKey);
-            
-            const parentKey2 = secp.Point.fromHex(this.publicKey.toString('hex'));
-            const childKey2 = secp.Point.BASE.multiply(iL2).add(parentKey2);          
-            
-            // if Ki is the point at infinity, the resulting key is invalid; proceed with the next value for i
-            // if (childKey.isInfinity()) {
-            //     return this.deriveChildKey(childIndex + 1, false);
-            // }
+            const parentKey = secp.Point.fromHex(this.publicKey.toString('hex'));
+            const childKey = secp.Point.BASE.multiply(iL).add(parentKey);          
             try {
-                childKey2.assertValidity();
+                childKey.assertValidity();
             } catch (error) {
                 return this.deriveChildKey(childIndex + 1, false);
             }
-            // const compressedChildKey = Buffer.from(childKey.encode(null, true));
             return new HDKey({
                 depth: this.depth + 1,
-                // publicKey: compressedChildKey.slice(1),
-                publicKey: Buffer.from(childKey2.toRawX()),
+                publicKey: Buffer.from(childKey.toRawX()),
                 chainCode: iR,
                 parentFingerprint: this.fingerprint,
                 index,
@@ -291,18 +261,18 @@ export class HDKey {
         }
     }
     createIndexesFromWord(word: string, length = 16): Int32Array {
-        const hash = hmacSha512(this.chainCode, sha256(word));
-        const hash1 = hmacSha512(this.privateKey, hash);
-        const hash2 = sha256(hash1);
+        const hash0 = sha256(word);
+        const hash1 = hmacSha512(this.privateKey, hash0);
+        const hash2 = hmacSha512(this.chainCode, hash0);
         const r2 = new Int32Array(20);
         for (let i = 0; i < length; i++) {
-            const value = i < 8 ? Math.abs(hash.readInt32BE(i * 8)) : Math.abs(hash1.readInt32BE((i - 8) * 8));
+            const value = i < 8 ? Math.abs(hash1.readInt32BE(i * 8)) : Math.abs(hash2.readInt32BE((i - 8) * 8));
             r2[i] = value;
         }
-        r2[16] = Math.abs(hash2.readInt32BE(0));
-        r2[17] = Math.abs(hash2.readInt32BE(8));
-        r2[18] = Math.abs(hash2.readInt32BE(16));
-        r2[19] = Math.abs(hash2.readInt32BE(24));
+        r2[16] = Math.abs(hash0.readInt32BE(0));
+        r2[17] = Math.abs(hash0.readInt32BE(8));
+        r2[18] = Math.abs(hash0.readInt32BE(16));
+        r2[19] = Math.abs(hash0.readInt32BE(24));
         return r2;
     }
 }
