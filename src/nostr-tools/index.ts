@@ -1,3 +1,3 @@
 
 
-export * as nip19wrapper from './nip19-wrapper'
+export * as nip19Extension from './nip19-extension'

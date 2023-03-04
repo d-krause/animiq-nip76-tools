@@ -1,6 +1,6 @@
 import * as secp256k1 from '@noble/secp256k1'
 import { bech32 } from '@scure/base'
-import { nip19 } from 'nostr-tools';
+// import { nip19 } from 'nostr-tools';
 
 type TLV = { [t: number]: Uint8Array[] }
 
@@ -70,12 +70,12 @@ export function nsecthreadEncode(secthread: SecureThreadPointer): string {
     return bech32.encode('nsecthread', words, Bech32MaxSize)
 }
 
-export function decode(nip19str: string): {
+export function decode(nip19: string): {
     type: string
-    data: nip19.ProfilePointer | nip19.EventPointer | nip19.AddressPointer | SecureThreadPointer | string
+    data: SecureThreadPointer | string
 } {
-    if (nip19str.startsWith('nsecthread')) {
-        let { prefix, words } = bech32.decode(nip19str, Bech32MaxSize)
+    const { prefix, words } = bech32.decode(nip19, Bech32MaxSize);
+    if (prefix === 'nsecthread') {
         let data = new Uint8Array(bech32.fromWords(words))
         let tlv = parseTLV(data)
         if (tlv[1][0].length !== 32) throw new Error('TLV 1-0 should be 32 bytes')
@@ -99,6 +99,6 @@ export function decode(nip19str: string): {
             }
         }
     } else {
-        return nip19.decode(nip19str)
+        throw new Error(`The prefix ${prefix} cannot de decoded in this nip19 extension.`)
     }
 }
