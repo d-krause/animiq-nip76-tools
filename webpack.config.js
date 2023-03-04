@@ -1,6 +1,24 @@
 const path = require("path");
+const fs = require('fs');
+const srcPackageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 
 const isProduction = process.env.NODE_ENV == "production";
+
+
+const distPackageJson = JSON.stringify(
+  {
+    "name": srcPackageJson.name,
+    "version": srcPackageJson.version,
+    "description": srcPackageJson.description,
+    "author": srcPackageJson.author,
+    "license": srcPackageJson.license,
+    "main": "bundle.js",
+    "module": "bundle.js",
+    "typings": "src/index.d.ts",
+    "sideEffects": false
+  }, null, '\t'
+);
+fs.writeFileSync(`${__dirname}/dist/package.json`, distPackageJson, 'utf8');
 
 const config = {
   entry: "./src/index.ts",
@@ -8,16 +26,13 @@ const config = {
     path: path.resolve(__dirname, "dist"),
     filename: "bundle.js",
     library: {
-      type: "module",  // see https://webpack.js.org/configuration/output/#outputlibrarytype
+      type: "module", 
     },
   },
   experiments: {
     outputModule: true,
   },
-  plugins: [
-    // Add your plugins here
-    // Learn more about plugins from https://webpack.js.org/configuration/plugins/
-  ],
+  plugins: [],
   module: {
     rules: [
       {
@@ -29,9 +44,6 @@ const config = {
         test: /\.(eot|svg|ttf|woff|woff2|png|jpg|gif)$/i,
         type: "asset",
       },
-
-      // Add your rules for custom modules here
-      // Learn more about loaders from https://webpack.js.org/loaders/
     ],
   },
   resolve: {

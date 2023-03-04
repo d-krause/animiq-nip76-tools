@@ -1,6 +1,9 @@
 {
   "name": "animiq-nip76-tools",
   "version": "1.0.0",
+  "description": "Tools for handling Trace Resistant Secret NOSTR Events defined in NIP76.",
+  "author": "David Krause (npub1s29dcvrpuncv8uvcfh8fvqp7hzwj4vneuup7q80gqmym9w3nlaes7fkvc2)",
+  "license": "MIT",
   "main": "src/index.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -10,9 +13,6 @@
     "watch": "webpack --watch"
   },
   "keywords": [],
-  "author": "d-krause",
-  "license": "ISC",
-  "description": "My webpack project",
   "dependencies": {
     "@noble/secp256k1": "^1.7.1",
     "@scure/base": "^1.1.1",
