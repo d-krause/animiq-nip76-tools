@@ -1,9 +1,4 @@
-/*
- * Copyright Kepler Group, Inc. - All Rights Reserved
- * Unauthorized copying of this file, via any medium is strictly prohibited.
- * The contents of this file are considered proprietary and confidential.
- * Written by Dave Krause <dkrause@keplergroupsystems.com>, February 2019
- */
+/*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
 import * as Base58 from 'bs58';
 import { Buffer } from 'buffer';
 import { hmacSha512, sha256, hash160 } from '../util';

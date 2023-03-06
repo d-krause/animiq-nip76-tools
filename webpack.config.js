@@ -1,3 +1,4 @@
+const webpack = require("webpack");
 const path = require("path");
 const fs = require('fs');
 const { DuplicatesPlugin } = require("inspectpack/plugin");
@@ -27,7 +28,7 @@ const config = {
     path: path.resolve(__dirname, "dist"),
     filename: "bundle.js",
     library: {
-      type: "module", 
+      type: "module",
     },
   },
   experiments: {
@@ -39,7 +40,10 @@ const config = {
       emitHandler: undefined,
       ignoredPackages: undefined,
       verbose: false
-    })
+    }),
+    new webpack.ProvidePlugin({
+      'Buffer': ['buffer', 'Buffer'],
+    }),
   ],
   module: {
     rules: [
@@ -64,7 +68,7 @@ const config = {
     alias: {
       'bn.js': path.join(__dirname, 'node_modules/bn.js/lib/bn.js'),
     }
-  },
+  }
 };
 
 module.exports = () => {

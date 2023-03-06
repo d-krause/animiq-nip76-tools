@@ -1,14 +1,9 @@
-/*
- * Copyright Kepler Group, Inc. - All Rights Reserved
- * Unauthorized copying of this file, via any medium is strictly prohibited.
- * The contents of this file are considered proprietary and confidential.
- * Written by Dave Krause <dkrause@keplergroupsystems.com>, February 2019
- */
+/*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
 import { Buffer } from 'buffer';
 import * as crypto from 'crypto';
 import { sha256 } from '../util';
 import { HDKey, Versions } from '../keys';
-import { ProfileDocument, ProfileKeySet } from '../content';
+import { PrivateThread, ThreadKeySet } from '../content';
 
 interface WalletCostructorParams {
     randoms?: Uint32Array;
@@ -16,8 +11,9 @@ interface WalletCostructorParams {
 }
 
 export class Wallet {
-
+    readonly version = 3;
     private master!: HDKey;
+    nip76root!: HDKey;
     private aqroot!: HDKey;
     private pproot!: HDKey;
     private aproot!: HDKey;
@@ -25,7 +21,7 @@ export class Wallet {
     private password = '';
     private lockword = '';
     private locknums!: Int32Array;
-    profiles: ProfileDocument[] = [];
+    threads: PrivateThread[] = [];
     isGuest = false;
     isInSession = false;
     sessionValid = false;
@@ -34,21 +30,14 @@ export class Wallet {
     constructor() {
         const storedWallet = window.localStorage.getItem(WalletStorage.backupKey);
         const sessionWallet = window.localStorage.getItem(WalletStorage.sessionKey);
-        const legacyStoredWallet = window.localStorage.getItem(WalletStorage.legacyWalletKey);
 
-        if (!storedWallet && legacyStoredWallet != null) {
-            const val = JSON.parse(legacyStoredWallet) as WalletStorage;
-            this.init({ storage: val });
+        if (sessionWallet) {
+            this.isInSession = true;
+        } else if (storedWallet) {
+            this.requiresLogin = !this.lockword || !this.password;
         } else {
-            if (sessionWallet) {
-                this.isInSession = true;
-            } else if (storedWallet) {
-                this.requiresLogin = !this.lockword || !this.password;
-            } else {
-                this.isGuest = true;
-                this.reKey();
-            }
             this.isGuest = true;
+            this.reKey();
         }
     }
 
@@ -62,20 +51,24 @@ export class Wallet {
         }
     }
 
-    reKey(): void {
+    generateSessionKey(): string {
+        return Buffer.from(window.crypto.getRandomValues(new Uint8Array(32))).toString('base64');
+    }
+
+    reKey(): HDKey {
         if (!this.isGuest) {
             throw new Error('Existing Wallet cannot be rekeyed.');
         }
         const randoms = new Uint32Array(66);
         window.crypto.getRandomValues(randoms);
         this.init({ randoms: randoms });
+        return this.master;
     }
 
     restoreFromKey(extendedPrivateKey: string): boolean {
         const ws = new WalletStorage();
         ws.k = extendedPrivateKey;
-        ws.v = 3;
-        // const rtn = new Wallet(this.contentService);
+        ws.v = this.version;
         this.init({ storage: ws });
         this.isGuest = false;
         return true;
@@ -103,7 +96,7 @@ export class Wallet {
         const cryptoKey = crypto.pbkdf2Sync(secretKey, salt, 2145, 32, 'sha512');
 
         const cipher = crypto.createCipheriv('aes-256-gcm', cryptoKey, iv);
-        const cryptUpdate = cipher.update(cryptoBuffer);
+        const cryptUpdate = cipher.update(Buffer.from(cryptoBuffer));
         const cryptFinal = cipher.final();
         const authTag = cipher.getAuthTag();
 
@@ -151,7 +144,7 @@ export class Wallet {
 
             this.master = new HDKey(keyParams);
             this.isGuest = false;
-            if (lockword) {
+            if (lockword !== null) {
                 this.setLockword(lockword);
             } else {
                 this.locknums = new Int32Array(this.toArrayBuffer(decrypted.slice(65)));
@@ -181,14 +174,14 @@ export class Wallet {
             throw new Error('Master private key needed before setLockword().');
         }
         this.lockword = word;
-        this.aqroot = this.master.derive(`m/44'/1237'/0'`);
-        if (!numsOnly) { this.locknums = this.aqroot.createIndexesFromWord(this.lockword); }
-        this.aqroot = this.aqroot.derive(`${this.locknums[19]}'/${this.locknums[15]}'/${this.locknums[11]}'/${this.locknums[7]}'`);
+        this.nip76root = this.master.derive(`m/44'/1237'/0'`);
+        if (!numsOnly) { this.locknums = this.nip76root.createIndexesFromWord(this.lockword); }
+        this.aqroot = this.nip76root.derive(`${this.locknums[19]}'/${this.locknums[15]}'/${this.locknums[11]}'/${this.locknums[7]}'`);
         this.pproot = this.aqroot.derive(`${this.locknums[18]}'/${this.locknums[14]}'/${this.locknums[10]}'/${this.locknums[6]}'`);
         this.aproot = this.aqroot.derive(`${this.locknums[17]}'/${this.locknums[13]}'/${this.locknums[9]}'/${this.locknums[5]}'`);
         this.sproot = this.aqroot.derive(`${this.locknums[16]}'/${this.locknums[12]}'/${this.locknums[8]}'/${this.locknums[4]}'`);
-        this.profiles = [] as ProfileDocument[];
-        this.getProfile(0);
+        this.threads = [] as PrivateThread[];
+        this.getThread(0);
     }
 
     save(): string {
@@ -211,60 +204,26 @@ export class Wallet {
             window.localStorage.setItem(WalletStorage.backupKey, newBackup);
         }
         window.localStorage.removeItem(WalletStorage.sessionKey);
-        window.localStorage.removeItem(WalletStorage.legacyWalletKey);
     }
 
-    private createProfile(keyset: ProfileKeySet, version = 3, isGuest = false): ProfileDocument {
-        const profile = Object.assign(ProfileDocument.default, ProfileDocument.emptyProfile);
-        profile.v = version;
-        profile.isGuest = isGuest || false;
-        profile.p.name = isGuest ? 'Guest User' : 'Loading ...';
-        profile.setProfileKey(keyset.pp);
-        profile.setKeys(keyset.ap, keyset.sp);
-        return profile;
+    private createThread(keyset: ThreadKeySet): PrivateThread {
+        const thread = PrivateThread.default;
+        thread.v = 3;
+        thread.p = { 
+            name: 'Loading Thread Info ...', 
+            last_known_index: 0 
+        };
+        thread.setProfileKey(keyset.pp);
+        thread.setKeys(keyset.ap, keyset.sp);
+        return thread;
     }
 
-
-    /**
-     * v3 notes
-     * a lockword is used to determine the child key indexes so that if a wallet master key is compromised an attacker
-     * would still have a lot of work remaining to determine the wallet profile keys. Here is how much work.
-     *
-     * master.createIndexesFromWord() returns 20  2^31 useable index integers.
-     *      20 of 2,147,483,648 (~2.1 Billion) possibles
-     *
-     * aqroot is a derived 4 deep of the default aqRoot:
-     *      2^31^4 = 45,671,926,166,590,716,193,865,151,022,383,844,364,247,891,968 (~ 46 Quattuordecillion) [47 digits]
-     *
-     * pproot (and aproot,sproot) is derived from another 4 from aqroot, making it 8 levels deep:
-     *      2^31^8 = 452,312,848,583,266,388,373,324,160,190,187,140,051,835,877,600,158,453,279,131,187,530,910,662,656
-     *      (~ 452 Trillion Vigintillion) [75 digits]
-     *
-     * ppOffset (and apOffset, spOffset) are 2^31:
-     *      2,147,483,648 (~2.1 Billion) possibles
-     *
-     * therefore, given an attacker succeeds in acquiring the master private key (which is protected by another password)
-     *
-     * (A) for him to determine a profile signing private key, a brute force attack could need to perform this many calculations:
-     *      2^31^9 =
-     *      971,334,446,112,864,535,459,730,953,411,759,453,321,203,419,526,069,760,625,906,204,869,452,142,602,604,249,088
-     *      971 Sextiliion Vigintillion [84 digits]
-     *
-     * (B) from there to determine the addressing key and secret key, additional calculations needed off the discovered aqroot for each:
-     *      2^31^5 = 45,671,926,166,590,716,193,865,151,022,383,844,364,247,891,968 (~45.6 Quattuordecillion) [47 digits]
-     *
-     * thus, in order to fully use a compromised wallet private key, the attacker could need to perform A + B + B calculations:
-     *      971,334,446,112,864,535,459,730,953,411,759,453,412,547,271,859,251,193,013,636,506,914,219,831,331,100,033,024
-     *      971 Sextiliion Vigintillion (and a few more :-) [84 digits]
-     *
-     * @param index array like 0 based profile number
-     */
-    getProfile(index: number): ProfileDocument {
+    getThread(index: number): PrivateThread {
         if (!this.pproot || !this.aproot || !this.sproot) {
-            throw new Error('PP Root public, AP Root, and SP Root keys needed before getProfile().');
+            throw new Error('PP Root public, AP Root, and SP Root keys needed before getThread().');
         }
-        if (!this.profiles[index]) {
-            let keyset: ProfileKeySet;
+        if (!this.threads[index]) {
+            let keyset: ThreadKeySet;
             const ppOffset = ((index + 1) * this.locknums[3]) % HDKey.hardenedKeyOffset;
             const apOffset = ((index + 1) * this.locknums[2]) % HDKey.hardenedKeyOffset;
             const spOffset = ((index + 1) * this.locknums[1]) % HDKey.hardenedKeyOffset;
@@ -272,20 +231,15 @@ export class Wallet {
             const ap = this.aproot.deriveChildKey(apOffset, true);
             const sp = this.sproot.deriveChildKey(spOffset, true);
             keyset = { pp: pp, ap: ap, sp: sp, ver: Versions.animiqAPI3 };
-            this.profiles[index] = this.createProfile(keyset, 3, this.isGuest);
+            this.threads = [...this.threads, this.createThread(keyset)];
         }
-        return this.profiles[index];
-    }
-
-    findProfile(address: string) {
-        return this.profiles.find(p => p.a === address);
+        return this.threads[index];
     }
 }
 
 export class WalletStorage {
-    static readonly legacyWalletKey = '_animiq_wallet_';
-    static readonly backupKey = 'aqbkpv3';
-    static readonly sessionKey = 'aqsesv3';
+    static readonly backupKey = 'nip76bkp';
+    static readonly sessionKey = 'nip76ses';
     v!: number;
     k!: string;
     l!: string;

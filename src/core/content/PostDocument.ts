@@ -1,17 +1,13 @@
-/*
- * Copyright Kepler Group, Inc. - All Rights Reserved
- * Unauthorized copying of this file, via any medium is strictly prohibited.
- * The contents of this file are considered proprietary and confidential.
- * Written by Dave Krause <dkrause@keplergroupsystems.com>, February 2019
- */
+/*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
 import { ContentDocument } from './ContentDocument';
 import { IndexDocument, IndexPermission } from './IndexDocument';
 import { HDKey } from '../keys';
-import { ProfileDocument } from './ProfileDocument';
+import { PrivateThread } from './PrivateThread';
 
 export class PostDocument extends ContentDocument {
     override p!: IPostPayload;
-    profile!: ProfileDocument;
+    nostrEvent: any;
+    thread!: PrivateThread;
     documentsMap!: IndexDocument;
     documents!: any[];
 
@@ -41,11 +37,11 @@ export class PostDocument extends ContentDocument {
     }
 
     get posterName() {
-        if (this.profile) {
-            if (this.profile.p && this.profile.p.name) {
-                return this.profile.p.name;
+        if (this.thread) {
+            if (this.thread.p && this.thread.p.name) {
+                return this.thread.p.name;
             } else {
-                return 'Anonymous-' + this.profile.displayAddress;
+                return 'Anonymous-' + this.thread.displayAddress;
             }
         } else {
             return 'undefined - error';
@@ -53,8 +49,8 @@ export class PostDocument extends ContentDocument {
     }
 
     get posterAddress() {
-        if (this.profile) {
-            return this.profile.a;
+        if (this.thread) {
+            return this.thread.a;
         } else {
             return undefined;
         }

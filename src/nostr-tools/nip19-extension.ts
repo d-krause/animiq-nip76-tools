@@ -57,7 +57,7 @@ export function nsecthreadEncode(secthread: SecureThreadPointer): string {
     let version = new ArrayBuffer(2)
     new DataView(version).setUint16(0, secthread.version, false)
     let data = encodeTLV({
-        0: [new Uint8Array(version)],
+        0: [Uint8Array.from([secthread.version])],
         1: [
             secp256k1.utils.hexToBytes(secthread.addresses.pubkey),
             secthread.addresses.chain ? secp256k1.utils.hexToBytes(secthread.addresses.chain) : new Uint8Array(),

@@ -1,9 +1,4 @@
-/*
- * Copyright Kepler Group, Inc. - All Rights Reserved
- * Unauthorized copying of this file, via any medium is strictly prohibited.
- * The contents of this file are considered proprietary and confidential.
- * Written by Dave Krause <dkrause@keplergroupsystems.com>, February 2019
- */
+/*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
 import { Buffer } from 'buffer';
 import { ContentDocument } from './ContentDocument';
 import { HDKey, HDKissAddress as Address, HDKissDocumentType as ContentDocumentType } from '../keys';

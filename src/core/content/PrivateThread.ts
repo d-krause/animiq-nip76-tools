@@ -1,75 +1,52 @@
-/*
- * Copyright Kepler Group, Inc. - All Rights Reserved
- * Unauthorized copying of this file, via any medium is strictly prohibited.
- * The contents of this file are considered proprietary and confidential.
- * Written by Dave Krause <dkrause@keplergroupsystems.com>, February 2019
- */
+/*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
 import { Buffer } from 'buffer';
 import { ContentDocument } from './ContentDocument';
 import { IndexDocument, IndexPermission } from './IndexDocument';
 import { PostDocument } from './PostDocument';
 import { HDKey, HDKissAddress as Address, HDKissDocumentType as ContentDocumentType, Bip32NetworkInfo } from '../keys';
+import { nsecthreadEncode, SecureThreadPointer } from '../../nostr-tools/nip19-extension';
 
-export interface ProfileKeySet {
+export interface ThreadKeySet {
     ver: Bip32NetworkInfo;
     pp: HDKey;
     ap: HDKey;
     sp: HDKey;
 }
 
-export class ProfileDocumentIndexMap {
-    profile!: IndexDocument;
+export class ThreadIndexMap {
     post!: IndexDocument;
     follow!: IndexDocument;
-    get canRead() {
-        return !!this.profile && !!this.post;
-    }
 }
 
-export interface IProfilePayload {
+export interface IThreadPayload {
 
     name?: string;
     pic?: string;
-    message?: string;
-    link?: string;
-    is_public: boolean;
-    /**
-     * API version 2 and under ONLY!
-     */
-    ex_pub_key?: string;
+    description?: string;
+    is_public?: boolean;
+    created_at?: number
+    last_known_index: number;
 }
 
-export class ProfileDocument extends ContentDocument {
+export class PrivateThread extends ContentDocument {
 
     static override get default() {
-        return new ProfileDocument(undefined, undefined);
+        return new PrivateThread(undefined, undefined);
     }
 
-    static readonly emptyProfile = Object.assign(ProfileDocument.default, {
-        a: 'AQ000000000000000000000000000000000000000',
-        p: {
-            name: 'Loading ...',
-            message: '',
-        }
-    });
-
-    override p!: IProfilePayload;
+    override p!: IThreadPayload;
+    ownerPubKey!: string;
     pp!: HDKey;
     signingParent!: HDKey;
-    iqon!: string;
     isPublic!: boolean;
-    isGuest!: boolean;
-    isLegacyProfile!: boolean;
     ready = false;
-    indexMap = new ProfileDocumentIndexMap();
+    indexMap = new ThreadIndexMap();
     posts = [] as PostDocument[];
-    notifInterval: any;
 
     constructor(rawData: any, parent: ContentDocument | undefined) {
         super(rawData, parent);
         if (rawData) {
             if (rawData.indexes) {
-                this.indexMap.profile = new IndexDocument(rawData.indexes.profile, this);
                 this.indexMap.post = new IndexDocument(rawData.indexes.post, this);
             }
             if (rawData.pp) {
@@ -78,15 +55,10 @@ export class ProfileDocument extends ContentDocument {
         }
     }
 
-
-    get keyset(): ProfileKeySet {
+    get keyset(): ThreadKeySet {
         return {
             pp: this.pp, ap: this.ap, sp: this.sp, ver: this.pp.version
-        } as ProfileKeySet;
-    }
-
-    get isEmpty() {
-        return this.a === ProfileDocument.emptyProfile.a;
+        } as ThreadKeySet;
     }
 
     setProfileKey(pp: HDKey) {
@@ -101,22 +73,14 @@ export class ProfileDocument extends ContentDocument {
         const resetKeys = super.setKeys(ap, sp);
         if (resetKeys) {
 
-            this.indexMap = new ProfileDocumentIndexMap();
-
-            this.indexMap.profile = IndexDocument.createIndex(
-                'Profile',
-                ContentDocumentType.Profile,
-                IndexPermission.CreateByOwner,
-                this.v > 2 ? this.pp : this.ap,
-                this.v > 2 ? this.sp.deriveChildKey(201, true) : this.ap
-            );
+            this.indexMap = new ThreadIndexMap();
 
             this.indexMap.post = IndexDocument.createIndex(
                 'Post',
                 ContentDocumentType.Post,
                 IndexPermission.CreateByOwner,
-                this.v > 2 ? this.ap.deriveChildKey(1001, true) : this.ap.deriveChildKey(2),
-                this.v > 2 ? this.sp.deriveChildKey(1001, true) : this.ap.deriveChildKey(3)
+                this.ap.deriveChildKey(1001, true),
+                this.sp.deriveChildKey(1001, true)
             );
             if (this.v > 2) {
                 this.indexMap.follow = IndexDocument.createIndex(
@@ -160,12 +124,11 @@ export class ProfileDocument extends ContentDocument {
         }
     }
 
-    override toSaveTip(): ProfileDocument {
+    override toSaveTip(): PrivateThread {
         const saveTip = super.toSaveTip() as any;
         saveTip.pp = this.pp ? this.pp.extendedPublicKey : undefined;
-        if (this.isPublic === true && this.indexMap.profile && this.indexMap.post) {
+        if (this.isPublic === true && this.indexMap.post) {
             saveTip.indexes = {
-                profile: this.indexMap.profile.toSaveTip(),
                 post: this.indexMap.post.toSaveTip()
             };
         }
@@ -175,12 +138,25 @@ export class ProfileDocument extends ContentDocument {
     override toDataDocument() {
         const dd = super.toDataDocument() as any;
         dd.pp = this.pp ? this.pp.extendedPublicKey : undefined;
-        if (this.isPublic === true && this.indexMap.profile && this.indexMap.post) {
+        if (this.isPublic === true && this.indexMap.post) {
             dd.ix = {
-                profile: this.indexMap.profile.a,
                 post: this.indexMap.post.a
             };
         }
         return dd;
+    }
+
+    get thread(): string {
+        return nsecthreadEncode({
+            version: 3,
+            addresses: {
+                pubkey: this.indexMap.post.ap.publicKey.toString('hex'),
+                chain: this.indexMap.post.ap.chainCode.toString('hex')
+            },
+            secrets: {
+                pubkey: this.indexMap.post.sp.publicKey.toString('hex'),
+                chain: this.indexMap.post.sp.chainCode.toString('hex')
+            }
+        });
     }
 }
