@@ -33,9 +33,9 @@ export class HDKey {
         }
         if (params.privateKey) {
             this._privateKey = params.privateKey;
-            this._publicKey = Buffer.from(secp.schnorr.getPublicKey(params.privateKey));
+            this._publicKey = Buffer.from(secp.getPublicKey(params.privateKey, true));
         } else if (params.publicKey) {
-            this._publicKey = params.publicKey;
+            this._publicKey =  Buffer.from(secp.Point.fromHex(params.publicKey).toRawBytes(true));
         }
         if (params.chainCode) this._chainCode = params.chainCode;
         this._depth = params.depth || 0;
@@ -203,14 +203,10 @@ export class HDKey {
             if (!this.privateKey) {
                 throw new Error('cannot derive a hardened child key from a public key');
             }
-            // 0x00 || ser256(kpar) || ser32(i)
-            // 0x00[1] || parent_private_key[32] || child_index[4]
             index += HARDENED_KEY_OFFSET;
             o += 1;
             o += this.privateKey.copy(data, o);
         } else {
-            // serP(point(kpar)) || ser32(i)
-            // compressed_parent_public_key[33] || child_index[4]
             o += this.publicKey.copy(data, o);
         }
 
@@ -222,9 +218,7 @@ export class HDKey {
             return this.deriveChildKey(childIndex + 1, hardened);
         }
         if (this.privateKey) {
-            // ki is parse256(IL) + kpar (mod n)
             const childKey = secp.utils.mod(iL + BigInt('0x' + this.privateKey.toString('hex')), secp.CURVE.n);
-            // if ki = 0, the resulting key is invalid; proceed with the next value for i
             if (childKey === 0n) {
                 return this.deriveChildKey(childIndex + 1, hardened);
             }
@@ -237,9 +231,8 @@ export class HDKey {
                 version: this.version
             });
         } else {
-            // Ki is point(parse256(IL)) + Kpar = G * IL + Kpar
-            const parentKey = secp.Point.fromHex(this.publicKey.toString('hex'));
-            const childKey = secp.Point.BASE.multiply(iL).add(parentKey);          
+            const parentKey = secp.Point.fromHex(this.publicKey);
+            const childKey = parentKey.add(secp.Point.fromPrivateKey(iL));
             try {
                 childKey.assertValidity();
             } catch (error) {
@@ -247,7 +240,7 @@ export class HDKey {
             }
             return new HDKey({
                 depth: this.depth + 1,
-                publicKey: Buffer.from(childKey.toRawX()),
+                publicKey: Buffer.from(childKey.toRawBytes(true)),
                 chainCode: iR,
                 parentFingerprint: this.fingerprint,
                 index,

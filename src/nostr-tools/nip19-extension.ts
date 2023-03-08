@@ -40,7 +40,7 @@ function encodeTLV(tlv: TLV): Uint8Array {
 }
 
 export type SecureThreadPointer = {
-    version: number;
+    ownerPubKey: string;
     addresses: {
         pubkey: string, // hex
         chain?: string // hex
@@ -54,10 +54,8 @@ export type SecureThreadPointer = {
 
 
 export function nsecthreadEncode(secthread: SecureThreadPointer): string {
-    let version = new ArrayBuffer(2)
-    new DataView(version).setUint16(0, secthread.version, false)
     let data = encodeTLV({
-        0: [Uint8Array.from([secthread.version])],
+        0: [utf8Encoder.encode(secthread.ownerPubKey)],
         1: [
             secp256k1.utils.hexToBytes(secthread.addresses.pubkey),
             secthread.addresses.chain ? secp256k1.utils.hexToBytes(secthread.addresses.chain) : new Uint8Array(),
@@ -78,15 +76,16 @@ export function decode(nip19: string): {
     if (prefix === 'nsecthread') {
         let data = new Uint8Array(bech32.fromWords(words))
         let tlv = parseTLV(data)
-        if (tlv[1][0].length !== 32) throw new Error('TLV 1-0 should be 32 bytes')
+        if (!tlv[0]?.[0]) throw new Error('missing TLV 0 for nsecthread.ownerPubKey')
+        if (tlv[1][0].length !== 0 && tlv[1][0].length !== 33) throw new Error('TLV 1-1 should be 0 or 33 bytes')
         if (tlv[1][1].length !== 0 && tlv[1][1].length !== 32) throw new Error('TLV 1-1 should be 0 or 32 bytes')
-        if (tlv[1][2].length !== 0 && tlv[1][2].length !== 32) throw new Error('TLV 1-2 should be 0 or 32 bytes')
+        if (tlv[1][2].length !== 0 && tlv[1][2].length !== 33) throw new Error('TLV 1-2 should be 0 or 33 bytes')
         if (tlv[1][3].length !== 0 && tlv[1][3].length !== 32) throw new Error('TLV 1-3 should be 0 or 32 bytes')
 
         return {
             type: 'nsecthread',
             data: {
-                version: parseInt(secp256k1.utils.bytesToHex(tlv[0][0]), 16),
+                ownerPubKey: utf8Decoder.decode(tlv[0][0]),
                 addresses: {
                     pubkey: secp256k1.utils.bytesToHex(tlv[1][0]),
                     chain: tlv[1][1].length ? secp256k1.utils.bytesToHex(tlv[1][1]) : undefined,
@@ -94,8 +93,8 @@ export function decode(nip19: string): {
                 secrets: tlv[1][2].length ? {
                     pubkey: secp256k1.utils.bytesToHex(tlv[1][2]),
                     chain: tlv[1][3].length ? secp256k1.utils.bytesToHex(tlv[1][3]) : undefined,
-                }: undefined,
-                relays: (tlv[2]||[]).map(d => utf8Decoder.decode(d))
+                } : undefined,
+                relays: (tlv[2] || []).map(d => utf8Decoder.decode(d))
             }
         }
     } else {

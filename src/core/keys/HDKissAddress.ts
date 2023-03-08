@@ -27,7 +27,7 @@ export class HDKissAddress {
         const length = params.publicKey.length;
         const firstByte = params.publicKey[0];
         //SECP if (length !== 33 && length !== 65 || firstByte < 2 || firstByte > 4) {
-        if (length !== 32 && length !== 64) {
+        if (length !== 33 && length !== 64) {
             throw new Error('invalid public key');
         }
         this._publicKey = params.publicKey;

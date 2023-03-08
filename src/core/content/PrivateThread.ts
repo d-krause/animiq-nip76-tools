@@ -3,7 +3,7 @@ import { Buffer } from 'buffer';
 import { ContentDocument } from './ContentDocument';
 import { IndexDocument, IndexPermission } from './IndexDocument';
 import { PostDocument } from './PostDocument';
-import { HDKey, HDKissAddress as Address, HDKissDocumentType as ContentDocumentType, Bip32NetworkInfo } from '../keys';
+import { HDKey, HDKissAddress as Address, HDKissDocumentType as ContentDocumentType, Bip32NetworkInfo, Versions } from '../keys';
 import { nsecthreadEncode, SecureThreadPointer } from '../../nostr-tools/nip19-extension';
 
 export interface ThreadKeySet {
@@ -53,6 +53,32 @@ export class PrivateThread extends ContentDocument {
                 this.setProfileKey(HDKey.parseExtendedKey(rawData.pp));
             }
         }
+    }
+
+    static fromPointer(pointer: SecureThreadPointer) {
+        const apK = Buffer.from(pointer.addresses.pubkey, 'hex')
+        const apC = Buffer.from(pointer.addresses.chain!, 'hex')
+        const ap = new HDKey({ publicKey: apK, chainCode: apC, version:Versions.animiqAPI3 });
+        const spK = Buffer.from(pointer.secrets!.pubkey, 'hex')
+        const spC = Buffer.from(pointer.secrets!.chain!, 'hex')
+        const sp = new HDKey({ publicKey: spK, chainCode: spC, version:Versions.animiqAPI3 });
+        const thread = PrivateThread.default;
+        thread.indexMap = new ThreadIndexMap();
+        thread.indexMap.post = IndexDocument.createIndex(
+            'Post',
+            ContentDocumentType.Post,
+            IndexPermission.CreateByOwner,
+            ap,
+            sp);
+        thread.ap = ap;
+        thread.sp = sp;
+        thread.v = 3;
+        thread.setProfileKey(ap);
+        thread.p = {
+            last_known_index: 0
+        };
+        thread.ownerPubKey = pointer.ownerPubKey;
+        return thread;
     }
 
     get keyset(): ThreadKeySet {
@@ -148,7 +174,7 @@ export class PrivateThread extends ContentDocument {
 
     get thread(): string {
         return nsecthreadEncode({
-            version: 3,
+            ownerPubKey: this.ownerPubKey,
             addresses: {
                 pubkey: this.indexMap.post.ap.publicKey.toString('hex'),
                 chain: this.indexMap.post.ap.chainCode.toString('hex')

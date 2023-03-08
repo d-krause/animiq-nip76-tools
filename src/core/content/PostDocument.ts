@@ -6,6 +6,7 @@ import { PrivateThread } from './PrivateThread';
 
 export class PostDocument extends ContentDocument {
     override p!: IPostPayload;
+    ownerPubKey!: string;
     nostrEvent: any;
     thread!: PrivateThread;
     documentsMap!: IndexDocument;
