@@ -4,7 +4,7 @@ import { ContentDocument } from './ContentDocument';
 import { IndexDocument, IndexPermission } from './IndexDocument';
 import { PostDocument } from './PostDocument';
 import { HDKey, HDKissAddress as Address, HDKissDocumentType as ContentDocumentType, Bip32NetworkInfo, Versions } from '../keys';
-import { nsecthreadEncode, SecureThreadPointer } from '../../nostr-tools/nip19-extension';
+import { nprivateThreadEncode, PrivateThreadPointer } from '../../nostr-tools/nip19-extension';
 
 export interface ThreadKeySet {
     ver: Bip32NetworkInfo;
@@ -15,7 +15,7 @@ export interface ThreadKeySet {
 
 export class ThreadIndexMap {
     post!: IndexDocument;
-    follow!: IndexDocument;
+    following!: IndexDocument;
 }
 
 export interface IThreadPayload {
@@ -37,32 +37,16 @@ export class PrivateThread extends ContentDocument {
     override p!: IThreadPayload;
     ownerPubKey!: string;
     pp!: HDKey;
-    signingParent!: HDKey;
-    isPublic!: boolean;
     ready = false;
     indexMap = new ThreadIndexMap();
     posts = [] as PostDocument[];
+    following = [] as PrivateThread[];
 
-    constructor(rawData: any, parent: ContentDocument | undefined) {
-        super(rawData, parent);
-        if (rawData) {
-            if (rawData.indexes) {
-                this.indexMap.post = new IndexDocument(rawData.indexes.post, this);
-            }
-            if (rawData.pp) {
-                this.setProfileKey(HDKey.parseExtendedKey(rawData.pp));
-            }
-        }
-    }
-
-    static fromPointer(pointer: SecureThreadPointer) {
-        const apK = Buffer.from(pointer.addresses.pubkey, 'hex')
-        const apC = Buffer.from(pointer.addresses.chain!, 'hex')
-        const ap = new HDKey({ publicKey: apK, chainCode: apC, version:Versions.animiqAPI3 });
-        const spK = Buffer.from(pointer.secrets!.pubkey, 'hex')
-        const spC = Buffer.from(pointer.secrets!.chain!, 'hex')
-        const sp = new HDKey({ publicKey: spK, chainCode: spC, version:Versions.animiqAPI3 });
+    static fromPointer(pointer: PrivateThreadPointer): PrivateThread {
+        const ap = new HDKey({ publicKey: pointer.addresses.pubkey, chainCode: pointer.addresses.chain, version: Versions.animiqAPI3 });
+        const sp = new HDKey({ publicKey: pointer.secrets.pubkey, chainCode: pointer.secrets.chain, version: Versions.animiqAPI3 });
         const thread = PrivateThread.default;
+        thread.ownerPubKey = pointer.ownerPubKey;
         thread.indexMap = new ThreadIndexMap();
         thread.indexMap.post = IndexDocument.createIndex(
             'Post',
@@ -73,25 +57,12 @@ export class PrivateThread extends ContentDocument {
         thread.ap = ap;
         thread.sp = sp;
         thread.v = 3;
-        thread.setProfileKey(ap);
+        thread.address = Address.from(ap.publicKey, ContentDocumentType.Profile, ap.version);
+        thread.a = thread.address.value;
         thread.p = {
             last_known_index: 0
         };
-        thread.ownerPubKey = pointer.ownerPubKey;
         return thread;
-    }
-
-    get keyset(): ThreadKeySet {
-        return {
-            pp: this.pp, ap: this.ap, sp: this.sp, ver: this.pp.version
-        } as ThreadKeySet;
-    }
-
-    setProfileKey(pp: HDKey) {
-        this.pp = pp;
-        this.address = Address.from(this.pp.publicKey, ContentDocumentType.Profile, this.pp.version);
-        this.a = this.address.value;
-        this.signingParent = pp.deriveChildKey(101);
     }
 
     override setKeys(ap: HDKey, sp: HDKey) {
@@ -108,81 +79,55 @@ export class PrivateThread extends ContentDocument {
                 this.ap.deriveChildKey(1001, true),
                 this.sp.deriveChildKey(1001, true)
             );
-            if (this.v > 2) {
-                this.indexMap.follow = IndexDocument.createIndex(
-                    'Follow',
-                    ContentDocumentType.Follow,
-                    IndexPermission.CreateByOwner,
-                    this.ap.deriveChildKey(7001, true),
-                    this.sp.deriveChildKey(7001, true)
-                );
-            }
+            this.indexMap.following = IndexDocument.createIndex(
+                'Follow',
+                ContentDocumentType.Follow,
+                IndexPermission.CreateByOwner,
+                this.ap.deriveChildKey(7001, true),
+                this.sp.deriveChildKey(7001, true)
+            );
+
+            this.address = Address.from(this.indexMap.post.ap.publicKey, ContentDocumentType.Profile, ap.version);
+            this.a = this.address.value;
 
             this.posts = [] as PostDocument[];
         }
         return resetKeys;
     }
 
-    get canRead() {
-        return this.pp !== undefined && this.ap !== undefined && this.sp !== undefined;
-    }
-
-    get canSign() {
-        return this.canRead && this.pp.privateKey !== null;
-    }
-
-    verifyDocumentOwner(doc: ContentDocument): boolean {
-        const nonce = Buffer.from(doc.n, 'hex');
-        const signingIndexes = [Math.abs(nonce.readInt32BE(0)), Math.abs(nonce.readInt32BE(8))];
-        if (doc instanceof IndexDocument) {
-            if (!doc.ap || !doc.ap.publicKey) {
-                throw new Error('Cannot verify ownership of an Index without an address parent public key (ap).');
+    getThreadPointer(secret: string | Buffer[] = ''): string {
+        return nprivateThreadEncode({
+            ownerPubKey: this.ownerPubKey,
+            addresses: {
+                pubkey: this.indexMap.post.ap.publicKey,
+                chain: this.indexMap.post.ap.chainCode
+            },
+            secrets: {
+                pubkey: this.indexMap.post.sp.publicKey,
+                chain: this.indexMap.post.sp.chainCode
             }
-            const idx = doc; // as IndexDocument;
-            const signingKey = idx.ap.derive(`${signingIndexes[0]}/${signingIndexes[1]}`);
-            const message = `${doc.t}&${doc.h}&${this.address.value}&${doc.n}&${idx.a}`;
-            const addr = Address.from(idx.ap.publicKey, ContentDocumentType.Index, idx.ap.version);
-            return addr.value === idx.a && Address.verify(message, doc.s, signingKey.publicKey, this.v);
-        } else {
-            const signingKey = this.signingParent.derive(`${signingIndexes[0]}/${signingIndexes[1]}`);
-            const message = `${doc.t}&${doc.h}&${this.address.value}&${doc.n}`;
-            return Address.verify(message, doc.s, signingKey.publicKey, this.v);
-        }
+        }, secret);
     }
 
     override toSaveTip(): PrivateThread {
         const saveTip = super.toSaveTip() as any;
         saveTip.pp = this.pp ? this.pp.extendedPublicKey : undefined;
-        if (this.isPublic === true && this.indexMap.post) {
-            saveTip.indexes = {
-                post: this.indexMap.post.toSaveTip()
-            };
-        }
+        // if (this.isPublic === true && this.indexMap.post) {
+        //     saveTip.indexes = {
+        //         post: this.indexMap.post.toSaveTip()
+        //     };
+        // }
         return saveTip;
     }
 
     override toDataDocument() {
         const dd = super.toDataDocument() as any;
         dd.pp = this.pp ? this.pp.extendedPublicKey : undefined;
-        if (this.isPublic === true && this.indexMap.post) {
-            dd.ix = {
-                post: this.indexMap.post.a
-            };
-        }
+        // if (this.isPublic === true && this.indexMap.post) {
+        //     dd.ix = {
+        //         post: this.indexMap.post.a
+        //     };
+        // }
         return dd;
-    }
-
-    get thread(): string {
-        return nsecthreadEncode({
-            ownerPubKey: this.ownerPubKey,
-            addresses: {
-                pubkey: this.indexMap.post.ap.publicKey.toString('hex'),
-                chain: this.indexMap.post.ap.chainCode.toString('hex')
-            },
-            secrets: {
-                pubkey: this.indexMap.post.sp.publicKey.toString('hex'),
-                chain: this.indexMap.post.sp.chainCode.toString('hex')
-            }
-        });
     }
 }

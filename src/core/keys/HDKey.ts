@@ -35,7 +35,7 @@ export class HDKey {
             this._privateKey = params.privateKey;
             this._publicKey = Buffer.from(secp.getPublicKey(params.privateKey, true));
         } else if (params.publicKey) {
-            this._publicKey =  Buffer.from(secp.Point.fromHex(params.publicKey).toRawBytes(true));
+            this._publicKey = Buffer.from(secp.Point.fromHex(params.publicKey).toRawBytes(true));
         }
         if (params.chainCode) this._chainCode = params.chainCode;
         this._depth = params.depth || 0;
@@ -97,26 +97,11 @@ export class HDKey {
             version
         });
     }
-    static concatPublicKeys(...keys: HDKey[]): Buffer {
-        const buf = Buffer.alloc(65 * keys.length);
-        let o = 0;
-        keys.forEach(k => {
-            o += k.chainCode.copy(buf, o);
-            o += k.publicKey.copy(buf, o);
-        });
-        return buf;
-    }
-    static deconcatPublicKeys(buf: Buffer): HDKey[] {
-        const numKeys = buf.length / 65;
-        const keys: HDKey[] = [];
-        let o = 0;
-        for (let i = 0; i < numKeys; i++) {
-            const chainCode = buf.slice(o, o += 32);
-            const publicKey = buf.slice(o, o += 33);
-            const k = new HDKey({ publicKey, chainCode, version: Versions.animiqAPI3 });
-            keys.push(k);
-        }
-        return keys;
+    deriveNewMasterKey(publicKeyHex: string | Buffer): HDKey {
+        const i = hmacSha512(this.publicKey, Buffer.from(publicKeyHex));
+        const iL = i.slice(0, 32);
+        const iR = i.slice(32);
+        return new HDKey({ privateKey: iL, chainCode: iR, version: this.version });
     }
     serialize(prefix: number, key: Buffer): string {
         // version_bytes[4] || depth[1] || parent_fingerprint[4] || index[4] || chain_code[32] || key_data[33] || checksum[4]
@@ -166,11 +151,8 @@ export class HDKey {
     get extendedPublicKey(): string {
         return this.serialize(this._version.bip32.public, this._publicKey);
     }
-    get publicKeyString(): string {
-        return this._publicKey.toString('base64');
-    }
-    get extendedPublicKeyHash(): string {
-        return Base58.encode(sha256(this.serialize(this._version.bip32.public, this._publicKey)));
+    get nostrPubKey(): string {
+        return this._publicKey.slice(1).toString('hex');
     }
     derive(chain: string): HDKey {
         const c = chain.toLowerCase();

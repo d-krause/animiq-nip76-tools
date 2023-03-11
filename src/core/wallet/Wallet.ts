@@ -11,7 +11,9 @@ interface WalletCostructorParams {
 }
 
 export class Wallet {
+    ownerPubKey!: string;
     readonly version = 3;
+    
     private master!: HDKey;
     nip76root!: HDKey;
     private aqroot!: HDKey;
@@ -21,16 +23,16 @@ export class Wallet {
     private password = '';
     private lockword = '';
     private locknums!: Int32Array;
+
     threads: PrivateThread[] = [];
+    following: PrivateThread[] = [];
     isGuest = false;
     isInSession = false;
-    sessionValid = false;
     requiresLogin = false;
 
     constructor() {
         const storedWallet = window.localStorage.getItem(WalletStorage.backupKey);
         const sessionWallet = window.localStorage.getItem(WalletStorage.sessionKey);
-
         if (sessionWallet) {
             this.isInSession = true;
         } else if (storedWallet) {
@@ -209,12 +211,13 @@ export class Wallet {
     private createThread(keyset: ThreadKeySet): PrivateThread {
         const thread = PrivateThread.default;
         thread.v = 3;
-        thread.p = { 
-            name: 'Loading Thread Info ...', 
-            last_known_index: 0 
+        thread.p = {
+            name: 'Loading Thread Info ...',
+            last_known_index: 0
         };
-        thread.setProfileKey(keyset.pp);
+        thread.pp = keyset.pp;
         thread.setKeys(keyset.ap, keyset.sp);
+        thread.ownerPubKey = this.ownerPubKey;
         return thread;
     }
 

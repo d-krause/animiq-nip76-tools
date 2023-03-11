@@ -1,6 +1,6 @@
+import * as crypto from 'crypto';
 import * as secp256k1 from '@noble/secp256k1'
 import { bech32 } from '@scure/base'
-// import { nip19 } from 'nostr-tools';
 
 type TLV = { [t: number]: Uint8Array[] }
 
@@ -39,64 +39,115 @@ function encodeTLV(tlv: TLV): Uint8Array {
     return secp256k1.utils.concatBytes(...entries)
 }
 
-export type SecureThreadPointer = {
+function encrypt(data: Buffer, key: Buffer): Buffer {
+
+    const iv = secp256k1.utils.randomBytes(16);
+    const secret = key.slice(0, 32);
+    const cipher = crypto.createCipheriv('aes-256-gcm', secret, iv);
+    const crypted = cipher.update(data);
+    const final = cipher.final();
+    const out = Buffer.concat([cipher.getAuthTag(), iv, crypted, final]);
+    return out;
+}
+
+function decrypt(data: Buffer, key: Buffer): Buffer | undefined {
+    try {
+        const bdata = data.slice(32) as any;
+        const auth = data.slice(0, 16);
+        const iv = data.slice(16, 32);
+        const secret = key.slice(0, 32);
+        const cipher = crypto.createDecipheriv('aes-256-gcm', secret, iv);
+        cipher.setAuthTag(auth);
+        const crypted = cipher.update(bdata, 'utf8');
+        const final = cipher.final();
+        const out = Buffer.concat([crypted, final]);
+        return out;
+
+    } catch (e) {
+        console.log('decrypt error' + e);
+        return undefined;
+    }
+}
+
+export type PrivateThreadPointer = {
     ownerPubKey: string;
     addresses: {
-        pubkey: string, // hex
-        chain?: string // hex
+        pubkey: Buffer,
+        chain: Buffer
     },
-    secrets?: {
-        pubkey: string, // hex
-        chain?: string // hex
+    secrets: {
+        pubkey: Buffer,
+        chain: Buffer
     }
     relays?: string[]
 }
 
+const keyFromSecretString = (secret: string) => {
+    return crypto.createHmac('sha256', 'nip76').update(secret, 'utf8').digest();
+};
 
-export function nsecthreadEncode(secthread: SecureThreadPointer): string {
-    let data = encodeTLV({
-        0: [utf8Encoder.encode(secthread.ownerPubKey)],
-        1: [
-            secp256k1.utils.hexToBytes(secthread.addresses.pubkey),
-            secthread.addresses.chain ? secp256k1.utils.hexToBytes(secthread.addresses.chain) : new Uint8Array(),
-            secthread.secrets?.pubkey ? secp256k1.utils.hexToBytes(secthread.secrets.pubkey) : new Uint8Array(),
-            secthread.secrets?.chain ? secp256k1.utils.hexToBytes(secthread.secrets.chain) : new Uint8Array()
-        ],
-        2: (secthread.relays || []).map(url => utf8Encoder.encode(url))
+const keyFromSharedSecret = (pubkey: Buffer, privkey: Buffer) => {
+    const pubkeyPoint = secp256k1.Point.fromHex(pubkey);
+    const sharedKey = secp256k1.getSharedSecret(privkey, pubkeyPoint).slice(1);
+    return Buffer.from(sharedKey);
+};
+
+export function nprivateThreadEncode(tp: PrivateThreadPointer, secret: string | Buffer[]): string {
+    let cryptKey: Buffer;
+    if (typeof (secret) === 'string') {
+        cryptKey = keyFromSecretString(secret);
+    } else {
+        cryptKey = keyFromSharedSecret(secret[0], secret[1]);
+    }
+    const ownerPubKey = Buffer.from(tp.ownerPubKey, 'hex');
+    let relayData = encodeTLV({
+        0: (tp.relays || []).map(url => utf8Encoder.encode(url))
     })
-    let words = bech32.toWords(data)
-    return bech32.encode('nsecthread', words, Bech32MaxSize)
+    const data = Buffer.concat([
+        ownerPubKey,
+        tp.addresses.pubkey,
+        tp.addresses.chain,
+        tp.secrets.pubkey,
+        tp.secrets.chain,
+        relayData
+    ]);
+    const encrypted = encrypt(data, cryptKey);
+    const words = bech32.toWords(encrypted);
+    return bech32.encode('nprivatethread1', words, Bech32MaxSize)
 }
 
-export function decode(nip19: string): {
+export function decode(nip19: string, secret: string | Buffer[]): {
     type: string
-    data: SecureThreadPointer | string
+    data: PrivateThreadPointer | string
 } {
     const { prefix, words } = bech32.decode(nip19, Bech32MaxSize);
-    if (prefix === 'nsecthread') {
-        let data = new Uint8Array(bech32.fromWords(words))
-        let tlv = parseTLV(data)
-        if (!tlv[0]?.[0]) throw new Error('missing TLV 0 for nsecthread.ownerPubKey')
-        if (tlv[1][0].length !== 0 && tlv[1][0].length !== 33) throw new Error('TLV 1-1 should be 0 or 33 bytes')
-        if (tlv[1][1].length !== 0 && tlv[1][1].length !== 32) throw new Error('TLV 1-1 should be 0 or 32 bytes')
-        if (tlv[1][2].length !== 0 && tlv[1][2].length !== 33) throw new Error('TLV 1-2 should be 0 or 33 bytes')
-        if (tlv[1][3].length !== 0 && tlv[1][3].length !== 32) throw new Error('TLV 1-3 should be 0 or 32 bytes')
-
+    if (prefix === 'nprivatethread1') {
+        let cryptKey: Buffer;
+        if (typeof (secret) === 'string') {
+            cryptKey = keyFromSecretString(secret);
+        } else {
+            cryptKey = keyFromSharedSecret(secret[0], secret[1]);
+        }
+        let encrypted = Buffer.from(bech32.fromWords(words));
+        let data = decrypt(encrypted, cryptKey);
+        if (!data) throw new Error('invalid decryption for nprivatethread1');
+        let tlv = parseTLV(data.slice(162));
         return {
-            type: 'nsecthread',
+            type: 'nprivatethread1',
             data: {
-                ownerPubKey: utf8Decoder.decode(tlv[0][0]),
+                ownerPubKey: data.slice(0, 32).toString('hex'),
                 addresses: {
-                    pubkey: secp256k1.utils.bytesToHex(tlv[1][0]),
-                    chain: tlv[1][1].length ? secp256k1.utils.bytesToHex(tlv[1][1]) : undefined,
+                    pubkey: data.slice(32, 65),
+                    chain: data.slice(65, 97),
                 },
-                secrets: tlv[1][2].length ? {
-                    pubkey: secp256k1.utils.bytesToHex(tlv[1][2]),
-                    chain: tlv[1][3].length ? secp256k1.utils.bytesToHex(tlv[1][3]) : undefined,
-                } : undefined,
-                relays: (tlv[2] || []).map(d => utf8Decoder.decode(d))
+                secrets: {
+                    pubkey: data.slice(97, 130),
+                    chain: data.slice(130, 162),
+                },
+                relays: (tlv[0] || []).map(d => utf8Decoder.decode(d))
             }
         }
+
     } else {
         throw new Error(`The prefix ${prefix} cannot de decoded in this nip19 extension.`)
     }
