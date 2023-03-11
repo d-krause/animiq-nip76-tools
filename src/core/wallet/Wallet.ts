@@ -10,10 +10,16 @@ interface WalletCostructorParams {
     storage?: WalletStorage;
 }
 
+function getCookie(name: string) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop()?.split(';').shift();
+}
+
 export class Wallet {
-    ownerPubKey!: string;
     readonly version = 3;
-    
+    ownerPubKey!: string;
+
     private master!: HDKey;
     nip76root!: HDKey;
     private aqroot!: HDKey;
@@ -29,11 +35,14 @@ export class Wallet {
     isGuest = false;
     isInSession = false;
     requiresLogin = false;
+    sessionExpireMinutes = 15;
 
     constructor() {
         const storedWallet = window.localStorage.getItem(WalletStorage.backupKey);
-        const sessionWallet = window.localStorage.getItem(WalletStorage.sessionKey);
-        if (sessionWallet) {
+        const sessionWallet = window.sessionStorage.getItem(WalletStorage.sessionKey);
+        const sessionKey = getCookie(WalletStorage.sessionIdName);
+        if (sessionWallet && sessionKey && this.readKey(sessionKey, 'session', null)) {
+            this.saveWallet();
             this.isInSession = true;
         } else if (storedWallet) {
             this.requiresLogin = !this.lockword || !this.password;
@@ -53,8 +62,25 @@ export class Wallet {
         }
     }
 
-    generateSessionKey(): string {
-        return Buffer.from(window.crypto.getRandomValues(new Uint8Array(32))).toString('base64');
+    saveWallet(privateKey: string | undefined = undefined) {
+        if(privateKey){
+            this.saveKey(privateKey, 'backup');;
+        }
+        if (this.sessionExpireMinutes) {
+            const sessionKey = Buffer.from(window.crypto.getRandomValues(new Uint8Array(32))).toString('hex');
+            const expires = (new Date(Date.now() + this.sessionExpireMinutes * 60000)).toUTCString();
+            document.cookie = `${WalletStorage.sessionIdName}=${sessionKey}; expires=${expires}; path=/;`
+            const sessionWallet = this.saveKey(sessionKey, 'session');
+            window.sessionStorage.setItem(WalletStorage.sessionKey, sessionWallet);
+            this.isInSession = true;
+        } else {
+            this.clearSession();
+        }
+    }
+
+    clearSession() {
+        window.sessionStorage.removeItem(WalletStorage.sessionKey);
+        document.cookie = `${WalletStorage.sessionIdName}=1; expires=1; path=/;`
     }
 
     reKey(): HDKey {
@@ -76,7 +102,7 @@ export class Wallet {
         return true;
     }
 
-    saveKey(secret: string, saveType: 'backup' | 'session', includeLocknums: boolean): string {
+    saveKey(secret: string, saveType: 'backup' | 'session'): string {
 
         if (!this.master || !this.pproot || !this.locknums) {
             throw new Error('Master private, PP Root public, and Lock Numbers key needed before save().');
@@ -87,14 +113,14 @@ export class Wallet {
         o += 33 - this.master.privateKey.length;
         this.master.privateKey.copy(keyBuffer, o);
 
-        const cryptoBuffer = includeLocknums
+        const cryptoBuffer = saveType === 'session'
             ? Buffer.concat([keyBuffer, Buffer.from(this.locknums.buffer)])
             : keyBuffer;
 
         const iv = crypto.randomBytes(16);
         const salt = crypto.randomBytes(64);
         const checksum = sha256(sha256(this.pproot.publicKey)).slice(0, 16);
-        const secretKey = Buffer.from(secret, saveType === 'session' ? 'base64' : 'utf-8');
+        const secretKey = Buffer.from(secret, 'hex');
         const cryptoKey = crypto.pbkdf2Sync(secretKey, salt, 2145, 32, 'sha512');
 
         const cipher = crypto.createCipheriv('aes-256-gcm', cryptoKey, iv);
@@ -107,7 +133,7 @@ export class Wallet {
         console.log('saveKey() out', Array.prototype.slice.call(encrypted, 0));
         const stored = encrypted.toString('base64');
         if (saveType === 'session') {
-            window.localStorage.setItem(WalletStorage.sessionKey, stored);
+            window.sessionStorage.setItem(WalletStorage.sessionKey, stored);
         } else {
             window.localStorage.setItem(WalletStorage.backupKey, stored);
         }
@@ -118,7 +144,7 @@ export class Wallet {
         let success = false;
         try {
             const stored = (saveType === 'session')
-                ? window.localStorage.getItem(WalletStorage.sessionKey)
+                ? window.sessionStorage.getItem(WalletStorage.sessionKey)
                 : window.localStorage.getItem(WalletStorage.backupKey);
             if (!stored) {
                 throw new Error('Stored value required to().');
@@ -130,7 +156,7 @@ export class Wallet {
             const checksum = encrypted.slice(96, 112);
             const cryptoBuffer = encrypted.slice(112);
 
-            const secretKey = Buffer.from(secret, saveType === 'session' ? 'base64' : 'utf-8');
+            const secretKey = Buffer.from(secret, 'hex');
             const cryptoKey = crypto.pbkdf2Sync(secretKey, salt, 2145, 32, 'sha512');
 
             const decipher = crypto.createDecipheriv('aes-256-gcm', cryptoKey, iv);
@@ -184,28 +210,7 @@ export class Wallet {
         this.sproot = this.aqroot.derive(`${this.locknums[16]}'/${this.locknums[12]}'/${this.locknums[8]}'/${this.locknums[4]}'`);
         this.threads = [] as PrivateThread[];
         this.getThread(0);
-    }
 
-    save(): string {
-        if (!this.master) {
-            throw new Error('Master private key needed before save().');
-        }
-        if (!this.isGuest) {
-            if (this.password) {
-                return this.saveKey(this.password, 'backup', false);
-            } else {
-                return undefined as any as string;
-            }
-        } else {
-            return undefined as any as string;
-        }
-    }
-
-    clearSession(newBackup = '') {
-        if (newBackup) {
-            window.localStorage.setItem(WalletStorage.backupKey, newBackup);
-        }
-        window.localStorage.removeItem(WalletStorage.sessionKey);
     }
 
     private createThread(keyset: ThreadKeySet): PrivateThread {
@@ -236,13 +241,15 @@ export class Wallet {
             keyset = { pp: pp, ap: ap, sp: sp, ver: Versions.animiqAPI3 };
             this.threads = [...this.threads, this.createThread(keyset)];
         }
+        this.threads[index].ownerPubKey = this.ownerPubKey;
         return this.threads[index];
     }
 }
 
 export class WalletStorage {
-    static readonly backupKey = 'nip76bkp';
-    static readonly sessionKey = 'nip76ses';
+    static readonly backupKey = 'nip76-wallet';
+    static readonly sessionKey = 'nip76-session';
+    static readonly sessionIdName = 'nip76-session-id';
     v!: number;
     k!: string;
     l!: string;
