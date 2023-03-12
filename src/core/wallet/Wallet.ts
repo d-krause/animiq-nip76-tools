@@ -1,7 +1,8 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
 import { Buffer } from 'buffer';
-import * as crypto from 'crypto';
-import { sha256 } from '../util';
+import { base64 } from '@scure/base';
+import * as secp from '@noble/secp256k1';
+import { sha256 as sha256x } from '@noble/hashes/sha256';
 import { HDKey, Versions } from '../keys';
 import { PrivateThread, ThreadKeySet } from '../content';
 
@@ -37,19 +38,23 @@ export class Wallet {
     requiresLogin = false;
     sessionExpireMinutes = 15;
 
-    constructor() {
+    private constructor() { }
+
+    static async create() {
         const storedWallet = window.localStorage.getItem(WalletStorage.backupKey);
         const sessionWallet = window.sessionStorage.getItem(WalletStorage.sessionKey);
         const sessionKey = getCookie(WalletStorage.sessionIdName);
-        if (sessionWallet && sessionKey && this.readKey(sessionKey, 'session', null)) {
-            this.saveWallet();
-            this.isInSession = true;
+        const wallet = new Wallet();
+        if (sessionWallet && sessionKey && await wallet.readKey(sessionKey, 'session', null)) {
+            wallet.saveWallet();
+            wallet.isInSession = true;
         } else if (storedWallet) {
-            this.requiresLogin = !this.lockword || !this.password;
+            wallet.requiresLogin = !wallet.lockword || !wallet.password;
         } else {
-            this.isGuest = true;
-            this.reKey();
+            wallet.isGuest = true;
+            wallet.reKey();
         }
+        return wallet;
     }
 
     private init(params: WalletCostructorParams): void {
@@ -62,23 +67,21 @@ export class Wallet {
         }
     }
 
-    saveWallet(privateKey: string | undefined = undefined) {
-        if(privateKey){
-            this.saveKey(privateKey, 'backup');;
+    async saveWallet(privateKey: string | undefined = undefined) {
+        if (privateKey) {
+            await this.saveKey(privateKey, 'backup');
         }
         if (this.sessionExpireMinutes) {
             const sessionKey = Buffer.from(window.crypto.getRandomValues(new Uint8Array(32))).toString('hex');
             const expires = (new Date(Date.now() + this.sessionExpireMinutes * 60000)).toUTCString();
             document.cookie = `${WalletStorage.sessionIdName}=${sessionKey}; expires=${expires}; path=/;`
-            const sessionWallet = this.saveKey(sessionKey, 'session');
-            window.sessionStorage.setItem(WalletStorage.sessionKey, sessionWallet);
-            this.isInSession = true;
+            this.isInSession = await this.saveKey(sessionKey, 'session');
         } else {
-            this.clearSession();
+            await this.clearSession();
         }
     }
 
-    clearSession() {
+    async clearSession() {
         window.sessionStorage.removeItem(WalletStorage.sessionKey);
         document.cookie = `${WalletStorage.sessionIdName}=1; expires=1; path=/;`
     }
@@ -102,45 +105,30 @@ export class Wallet {
         return true;
     }
 
-    saveKey(secret: string, saveType: 'backup' | 'session'): string {
-
+    async saveKey(secret: string, saveType: 'backup' | 'session'): Promise<boolean> {
         if (!this.master || !this.pproot || !this.locknums) {
             throw new Error('Master private, PP Root public, and Lock Numbers key needed before save().');
         }
-        const keyBuffer = Buffer.alloc(65);
-        let o = 0;
-        o += this.master.chainCode.copy(keyBuffer, o);
-        o += 33 - this.master.privateKey.length;
-        this.master.privateKey.copy(keyBuffer, o);
-
+        const keyBuffer = secp.utils.concatBytes(this.master.chainCode, this.master.privateKey);
         const cryptoBuffer = saveType === 'session'
-            ? Buffer.concat([keyBuffer, Buffer.from(this.locknums.buffer)])
+            ? Buffer.concat([keyBuffer, new Uint8Array(this.locknums.buffer)])
             : keyBuffer;
-
-        const iv = crypto.randomBytes(16);
-        const salt = crypto.randomBytes(64);
-        const checksum = sha256(sha256(this.pproot.publicKey)).slice(0, 16);
-        const secretKey = Buffer.from(secret, 'hex');
-        const cryptoKey = crypto.pbkdf2Sync(secretKey, salt, 2145, 32, 'sha512');
-
-        const cipher = crypto.createCipheriv('aes-256-gcm', cryptoKey, iv);
-        const cryptUpdate = cipher.update(Buffer.from(cryptoBuffer));
-        const cryptFinal = cipher.final();
-        const authTag = cipher.getAuthTag();
-
-        const encrypted = Buffer.concat([salt, iv, authTag, checksum, cryptUpdate, cryptFinal]);
-
-        console.log('saveKey() out', Array.prototype.slice.call(encrypted, 0));
-        const stored = encrypted.toString('base64');
+        const iv = window.crypto.getRandomValues(new Uint8Array(16));
+        const secretBytes = secp.utils.hexToBytes(secret);
+        const secretHash = sha256x.create().update(secretBytes).digest();
+        const alg = { name: 'AES-GCM', iv: iv, length: 256 } as AesKeyAlgorithm;
+        const secretKey = await window.crypto.subtle.importKey('raw', secretHash, alg, false, ['encrypt']);
+        const encrypted = await window.crypto.subtle.encrypt(alg, secretKey, cryptoBuffer);
+        const stored = base64.encode(secp.utils.concatBytes(iv, new Uint8Array(encrypted)));
         if (saveType === 'session') {
             window.sessionStorage.setItem(WalletStorage.sessionKey, stored);
         } else {
             window.localStorage.setItem(WalletStorage.backupKey, stored);
         }
-        return stored;
+        return true;
     }
 
-    readKey(secret: string, saveType: 'backup' | 'session', lockword: string | null): boolean {
+    async readKey(secret: string, saveType: 'backup' | 'session', lockword: string | null): Promise<boolean> {
         let success = false;
         try {
             const stored = (saveType === 'session')
@@ -149,52 +137,36 @@ export class Wallet {
             if (!stored) {
                 throw new Error('Stored value required to().');
             }
-            const encrypted = Buffer.from(stored, 'base64');
-            const salt = encrypted.slice(0, 64);
-            const iv = encrypted.slice(64, 80);
-            const authTag = encrypted.slice(80, 96);
-            const checksum = encrypted.slice(96, 112);
-            const cryptoBuffer = encrypted.slice(112);
 
-            const secretKey = Buffer.from(secret, 'hex');
-            const cryptoKey = crypto.pbkdf2Sync(secretKey, salt, 2145, 32, 'sha512');
-
-            const decipher = crypto.createDecipheriv('aes-256-gcm', cryptoKey, iv);
-            decipher.setAuthTag(authTag);
-            let decrypted = decipher.update(cryptoBuffer);
-            decrypted = Buffer.concat([decrypted, decipher.final()]);
+            const encrypted = base64.decode(stored);
+            const iv = encrypted.slice(0, 16);
+            const buffer = encrypted.slice(16);
+            const secretBytes = secp.utils.hexToBytes(secret);
+            const secretHash = sha256x.create().update(secretBytes).digest();
+            const alg = { name: 'AES-GCM', iv: iv, length: 256 } as AesKeyAlgorithm;
+            const secretKey = await window.crypto.subtle.importKey('raw', secretHash, alg, false, ['decrypt']);
+            const decrypted = await window.crypto.subtle.decrypt(alg, secretKey, buffer);
 
             const keyParams = {
-                chainCode: decrypted.slice(0, 32),
-                privateKey: decrypted.slice(33, 65),
+                chainCode: Buffer.from(decrypted.slice(0, 32)),
+                privateKey: Buffer.from(decrypted.slice(32, 64)),
                 version: Versions.nip76API1
             };
 
             this.master = new HDKey(keyParams);
             this.isGuest = false;
+
             if (lockword !== null) {
                 this.setLockword(lockword);
             } else {
-                this.locknums = new Int32Array(this.toArrayBuffer(decrypted.slice(65)));
+                this.locknums = new Int32Array(decrypted.slice(64));
                 this.setLockword(null as any as string, true);
             }
-
-            const checksumVerify = sha256(sha256(this.pproot?.publicKey)).slice(0, 16);
-            success = checksum.equals(checksumVerify);
-
+            success = true;
         } catch (ex) {
             console.error('Wallet.readKey() ex=', ex);
         }
         return success;
-    }
-
-    toArrayBuffer(buf: Buffer) {
-        const ab = new ArrayBuffer(buf.length);
-        const view = new Uint8Array(ab);
-        for (let i = 0; i < buf.length; ++i) {
-            view[i] = buf[i];
-        }
-        return ab;
     }
 
     setLockword(word: string, numsOnly = false) {
@@ -204,10 +176,10 @@ export class Wallet {
         this.lockword = word;
         this.nip76root = this.master.derive(`m/44'/1237'/0'`);
         if (!numsOnly) { this.locknums = this.nip76root.createIndexesFromWord(this.lockword); }
-        this.aqroot = this.nip76root.derive(`${this.locknums[19]}'/${this.locknums[15]}'/${this.locknums[11]}'/${this.locknums[7]}'`);
-        this.pproot = this.aqroot.derive(`${this.locknums[18]}'/${this.locknums[14]}'/${this.locknums[10]}'/${this.locknums[6]}'`);
-        this.aproot = this.aqroot.derive(`${this.locknums[17]}'/${this.locknums[13]}'/${this.locknums[9]}'/${this.locknums[5]}'`);
-        this.sproot = this.aqroot.derive(`${this.locknums[16]}'/${this.locknums[12]}'/${this.locknums[8]}'/${this.locknums[4]}'`);
+        this.aqroot = this.nip76root.derive(`m/${this.locknums[19]}'/${this.locknums[15]}'/${this.locknums[11]}'/${this.locknums[7]}'`);
+        this.aproot = this.aqroot.derive(`m/${this.locknums[17]}'/${this.locknums[13]}'/${this.locknums[9]}'/${this.locknums[5]}'`);
+        this.pproot = this.aqroot.derive(`m/${this.locknums[18]}'/${this.locknums[14]}'/${this.locknums[10]}'/${this.locknums[6]}'`);
+        this.sproot = this.aqroot.derive(`m/${this.locknums[16]}'/${this.locknums[12]}'/${this.locknums[8]}'/${this.locknums[4]}'`);
         this.threads = [] as PrivateThread[];
         this.getThread(0);
 

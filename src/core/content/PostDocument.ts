@@ -1,8 +1,9 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
+import { HDKey, HDKissDocumentType } from '../keys';
 import { ContentDocument } from './ContentDocument';
 import { IndexDocument, IndexPermission } from './IndexDocument';
-import { HDKey, HDKissDocumentType } from '../keys';
 import { PrivateThread } from './PrivateThread';
+import * as nostrTools from 'nostr-tools';
 
 export class PostDocument extends ContentDocument {
     override decryptedContent!: IPostPayload;
@@ -12,6 +13,7 @@ export class PostDocument extends ContentDocument {
     rp!: HDKey;
     reactionsIndex!: IndexDocument;
     reactions!: PostDocument[];
+    reactionTracker: { [key: string | symbol]: number } = {};
     repliesIndex!: IndexDocument;
     replies!: PostDocument[];
 
@@ -19,7 +21,7 @@ export class PostDocument extends ContentDocument {
 
         const resetKeys = super.setKeys(ap, sp);
         if (resetKeys) {
-            this.rp = this.ap.deriveNewMasterKey(this.ownerPubKey);
+            this.rp = this.ap.deriveNewMasterKey();
             this.reactionsIndex = IndexDocument.createIndex(
                 'Reaction',
                 HDKissDocumentType.Reaction,
@@ -55,7 +57,7 @@ export interface IPostPayload {
     message?: string;
     authorPubKey?: string;
     sig?: string;
-    type?: 0 | 1 | 2;  //Post|Reaction|Reply
+    kind: nostrTools.Kind
 }
 
 export interface Attachments {

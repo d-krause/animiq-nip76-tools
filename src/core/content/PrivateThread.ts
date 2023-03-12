@@ -88,7 +88,7 @@ export class PrivateThread extends ContentDocument {
         return resetKeys;
     }
 
-    getThreadPointer(secret: string | Buffer[] = ''): string {
+    async getThreadPointer(secret: string | Buffer[] = ''): Promise<string> {
         return nprivateThreadEncode({
             ownerPubKey: this.ownerPubKey,
             addresses: {

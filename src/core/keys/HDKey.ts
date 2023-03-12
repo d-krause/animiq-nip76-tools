@@ -108,12 +108,6 @@ export class HDKey {
     static fromJSON(json: { xpriv: string }): HDKey {
         return HDKey.parseExtendedKey(json.xpriv);
     }
-    deriveNewMasterKey(publicKeyHex: string | Buffer): HDKey {
-        const i = hmacSha512(this.publicKey, Buffer.from(publicKeyHex));
-        const iL = i.slice(0, 32);
-        const iR = i.slice(32);
-        return new HDKey({ privateKey: iL, chainCode: iR, version: this.version });
-    }
     serialize(prefix: number, key: Buffer): string {
         // version_bytes[4] || depth[1] || parent_fingerprint[4] || index[4] || chain_code[32] || key_data[33] || checksum[4]
         const buf = Buffer.alloc(!this.version.cloaked ? 78 : 69);
@@ -166,7 +160,7 @@ export class HDKey {
         return this._publicKey.slice(1).toString('hex');
     }
     derive(chain: string): HDKey {
-        if (!this.version.cloaked && !/^[mM]'?/.test(chain)) {
+        if (!/^[mM]'?/.test(chain)) {
           throw new Error('Path must start with "m" or "M"');
         }
         if (/^[mM]'?$/.test(chain)) {
@@ -285,7 +279,7 @@ export class HDKey {
         };
     }
     createIndexesFromWord(word: string, length = 16): Int32Array {
-        const hash0 = sha256(word);
+        const hash0 = sha256(Buffer.from(word));
         const hash1 = hmacSha512(this.privateKey, hash0);
         const hash2 = hmacSha512(this.chainCode, hash0);
         const r2 = new Int32Array(20);
@@ -298,5 +292,11 @@ export class HDKey {
         r2[18] = Math.abs(hash0.readInt32BE(16));
         r2[19] = Math.abs(hash0.readInt32BE(24));
         return r2;
+    }
+    deriveNewMasterKey(): HDKey {
+        const i = hmacSha512(this.publicKey, this.chainCode);
+        const iL = i.slice(0, 32);
+        const iR = i.slice(32);
+        return new HDKey({ privateKey: iL, chainCode: iR, version: this.version });
     }
 }

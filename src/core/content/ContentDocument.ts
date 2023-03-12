@@ -3,17 +3,6 @@
 import * as nostrTools from 'nostr-tools';
 import { HDKissAddress as Address, HDKey } from '../keys';
 
-export const foo: nostrTools.Event = {
-    content: '', 
-    created_at: 1, 
-    id: '', 
-    sig: '', 
-    
-    kind: 1, 
-    tags: [], 
-    pubkey: ''
-}
-
 /**
  * client only content fields, properties and methods
  */
@@ -49,18 +38,6 @@ export class ContentDocument implements nostrTools.Event {
 
     get formattedAddress() {
         return Address.formatAddress(this.a);
-    }
-
-    get displayAddress() {
-        return Address.formatAddress(this.a, true);
-    }
-
-    get datetime(): Date {
-        return new Date(this.created_at);
-    }
-
-    get indexIsValid(): boolean {
-        return this.i !== null && this.i !== undefined && !isNaN(this.i) && this.i >= 0 && this.i < HDKey.hardenedKeyOffset;
     }
 }
 

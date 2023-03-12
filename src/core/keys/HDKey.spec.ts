@@ -3,6 +3,10 @@ import { HDKey, Versions } from '../index';
 import * as secp from '@noble/secp256k1';
 import { base58 } from '@scure/base';
 
+import * as bip39 from '@scure/bip39';
+import { wordlist } from '@scure/bip39/wordlists/english';
+import { hmacSha512, uint8ArrayFromBuffer } from '../util';
+
 // from https://github.com/cryptocoinjs/hdkey/blob/42637e381bdef0c8f785b14f5b66a80dad969514/test/fixtures/hdkey.json, adding some new network type versions
 export const fixtures = [
     {
@@ -153,7 +157,38 @@ export const fixtures = [
         "animiqV2public": "apubFismZF2zKZV7iudAr3Nb6KLmjBJ9URgqzumQW77rHvaLDh7V8d1kNLPKq1aVtS3M9ibM5imc3QFSf7kMakSNCFwKpyZATHpgyPotJFBfLAk"
     }
 ];
+if (0) {
+    fit('bip39 ', () => {
+        for (var i = 0; i < 1; i++) {
 
+            let key = HDKey.parseExtendedKey(fixtures[0].nip76private).derive(`/m/0'/0'`);
+            const hash1 = hmacSha512(key.privateKey, Buffer.from('nip76'));
+            key = key.derive(`0'/0'`);
+            const hash2 = hmacSha512(key.privateKey, hash1);
+            key = key.derive(`0'/0'`);
+            const hash3 = hmacSha512(key.privateKey, hash2);
+
+            const locknums = Uint32Array.from([
+                hash1.readInt32BE(0), hash1.readInt32BE(8), hash1.readInt32BE(16), hash1.readInt32BE(24),
+                hash1.readInt32BE(32),hash1.readInt32BE(40), hash1.readInt32BE(48), hash1.readInt32BE(56), 
+                hash2.readInt32BE(0), hash2.readInt32BE(8), hash2.readInt32BE(16), hash2.readInt32BE(24),
+                hash2.readInt32BE(32),hash2.readInt32BE(40), hash2.readInt32BE(48), hash2.readInt32BE(56), 
+                hash3.readInt32BE(0), hash3.readInt32BE(8), hash3.readInt32BE(16), hash3.readInt32BE(24),
+                hash3.readInt32BE(32),hash3.readInt32BE(40), hash3.readInt32BE(48), hash3.readInt32BE(56), 
+            ])
+
+            const words1 = bip39.entropyToMnemonic(key.privateKey, wordlist);
+            const words2 = bip39.entropyToMnemonic(key.chainCode, wordlist);
+
+
+            // const mw = 'fooby drougey';
+            // console.log(mn)
+            // const ent = bip39.mnemonicToEntropy(mn, wordlist)
+            // const test2 = bip39.mnemonicToSeedSync(mn, mw);
+            debugger;
+        }
+    });
+}
 describe('hdkey', function () {
     describe('+ parseMasterSeed', function () {
         fixtures.forEach(function (f) {
@@ -556,8 +591,8 @@ describe('hdkey', function () {
             }
         });
     });
-    
-    if(0) { // fixture gen helper should not run by default
+
+    if (0) { // fixture gen helper should not run by default
         fixtures.forEach((f, i) => {
             const seed = Buffer.from(f.seed, 'hex')
             var hdkey = HDKey.parseMasterSeed(seed as Buffer, Versions.nip76API1)

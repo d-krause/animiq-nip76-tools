@@ -1,11 +1,11 @@
-import * as crypto from 'crypto';
+import { hmac } from '@noble/hashes/hmac';
+import { sha256 } from '@noble/hashes/sha256';
 import * as secp256k1 from '@noble/secp256k1'
-import { bech32 } from '@scure/base'
+import { bech32, utf8 } from '@scure/base'
+import { uint8ArrayFromBuffer } from '../core/util';
 
 type TLV = { [t: number]: Uint8Array[] }
 
-export const utf8Decoder = new TextDecoder('utf-8')
-export const utf8Encoder = new TextEncoder()
 const Bech32MaxSize = 5000
 
 function parseTLV(data: Uint8Array): TLV {
@@ -39,30 +39,27 @@ function encodeTLV(tlv: TLV): Uint8Array {
     return secp256k1.utils.concatBytes(...entries)
 }
 
-function encrypt(data: Buffer, key: Buffer): Buffer {
-
+async function encrypt(data: Buffer, key: Buffer): Promise<Uint8Array> {
     const iv = secp256k1.utils.randomBytes(16);
-    const secret = key.slice(0, 32);
-    const cipher = crypto.createCipheriv('aes-256-gcm', secret, iv);
-    const crypted = cipher.update(data);
-    const final = cipher.final();
-    const out = Buffer.concat([cipher.getAuthTag(), iv, crypted, final]);
+    const secretBytes = uint8ArrayFromBuffer(key.slice(0, 32));
+    const alg = { name: 'AES-GCM', iv: iv, length: 256 } as AesKeyAlgorithm;
+    const secretKey = await window.crypto.subtle.importKey('raw', secretBytes, alg, false, ['encrypt']);
+    const buffer = uint8ArrayFromBuffer(data);
+    const encrypted = new Uint8Array(await window.crypto.subtle.encrypt(alg, secretKey, buffer));
+    const out = secp256k1.utils.concatBytes(iv, encrypted);
     return out;
 }
 
-function decrypt(data: Buffer, key: Buffer): Buffer | undefined {
+async function decrypt(data: Buffer, key: Buffer): Promise<Buffer | undefined> {
     try {
-        const bdata = data.slice(32) as any;
-        const auth = data.slice(0, 16);
-        const iv = data.slice(16, 32);
-        const secret = key.slice(0, 32);
-        const cipher = crypto.createDecipheriv('aes-256-gcm', secret, iv);
-        cipher.setAuthTag(auth);
-        const crypted = cipher.update(bdata, 'utf8');
-        const final = cipher.final();
-        const out = Buffer.concat([crypted, final]);
-        return out;
-
+        const encrypted = uint8ArrayFromBuffer(data);
+        const iv2 = encrypted.slice(0, 16);
+        const buffer = encrypted.slice(16);
+        const secretBytes = uint8ArrayFromBuffer(key.slice(0,32));
+        const alg = { name: 'AES-GCM', iv: iv2, length: 256 } as AesKeyAlgorithm;
+        const secretKey = await window.crypto.subtle.importKey('raw', secretBytes, alg, false, ['decrypt']);
+        const decrypted = await window.crypto.subtle.decrypt(alg, secretKey, buffer);
+        return Buffer.from(decrypted);
     } catch (e) {
         console.log('decrypt error' + e);
         return undefined;
@@ -83,7 +80,7 @@ export type PrivateThreadPointer = {
 }
 
 const keyFromSecretString = (secret: string) => {
-    return crypto.createHmac('sha256', 'nip76').update(secret, 'utf8').digest();
+    return Buffer.from(hmac.create(sha256, utf8.decode('nip76')).update(utf8.decode(secret)).digest());
 };
 
 const keyFromSharedSecret = (pubkey: Buffer, privkey: Buffer) => {
@@ -92,7 +89,7 @@ const keyFromSharedSecret = (pubkey: Buffer, privkey: Buffer) => {
     return Buffer.from(sharedKey);
 };
 
-export function nprivateThreadEncode(tp: PrivateThreadPointer, secret: string | Buffer[]): string {
+export async function nprivateThreadEncode(tp: PrivateThreadPointer, secret: string | Buffer[]): Promise<string> {
     let cryptKey: Buffer;
     if (typeof (secret) === 'string') {
         cryptKey = keyFromSecretString(secret);
@@ -101,7 +98,7 @@ export function nprivateThreadEncode(tp: PrivateThreadPointer, secret: string | 
     }
     const ownerPubKey = Buffer.from(tp.ownerPubKey, 'hex');
     let relayData = encodeTLV({
-        0: (tp.relays || []).map(url => utf8Encoder.encode(url))
+        0: (tp.relays || []).map(url => utf8.decode(url))
     })
     const data = Buffer.concat([
         ownerPubKey,
@@ -111,15 +108,15 @@ export function nprivateThreadEncode(tp: PrivateThreadPointer, secret: string | 
         tp.secrets.chain,
         relayData
     ]);
-    const encrypted = encrypt(data, cryptKey);
+    const encrypted = await encrypt(data, cryptKey);
     const words = bech32.toWords(encrypted);
     return bech32.encode('nprivatethread1', words, Bech32MaxSize)
 }
 
-export function decode(nip19: string, secret: string | Buffer[]): {
+export async function decode(nip19: string, secret: string | Buffer[]): Promise<{
     type: string
     data: PrivateThreadPointer | string
-} {
+}> {
     const { prefix, words } = bech32.decode(nip19, Bech32MaxSize);
     if (prefix === 'nprivatethread1') {
         let cryptKey: Buffer;
@@ -129,7 +126,7 @@ export function decode(nip19: string, secret: string | Buffer[]): {
             cryptKey = keyFromSharedSecret(secret[0], secret[1]);
         }
         let encrypted = Buffer.from(bech32.fromWords(words));
-        let data = decrypt(encrypted, cryptKey);
+        let data = await decrypt(encrypted, cryptKey);
         if (!data) throw new Error('invalid decryption for nprivatethread1');
         let tlv = parseTLV(data.slice(162));
         return {
@@ -144,7 +141,7 @@ export function decode(nip19: string, secret: string | Buffer[]): {
                     pubkey: data.slice(97, 130),
                     chain: data.slice(130, 162),
                 },
-                relays: (tlv[0] || []).map(d => utf8Decoder.decode(d))
+                relays: (tlv[0] || []).map(d => utf8.encode(d))
             }
         }
 
