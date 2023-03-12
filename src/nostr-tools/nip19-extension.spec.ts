@@ -2,10 +2,10 @@
 import * as secp256k1 from '@noble/secp256k1'
 import { nip19Extension } from "./index";
 import { HDKey, Versions } from "../core";
-import { fixedMasterSeed } from "../core/keys/HDKey.spec";
+import { fixtures } from '../core/keys/HDKey.spec';
 const crypto = require('crypto').webcrypto;
 
-let kp = HDKey.parseMasterSeed(fixedMasterSeed, Versions.bitcoinMain);
+let kp = HDKey.parseMasterSeed(Buffer.from(fixtures[0].seed), Versions.bitcoinMain);
 let ap = kp.derive(`m/44'/1237'/0'/123'/456'`);
 let sp = kp.derive(`m/44'/1237'/0'/789'/999'`);
 
@@ -19,7 +19,7 @@ test('nprivateThreadEncode', () => {
     secp256k1.utils.randomBytes = mockRandom;
 
     const testPassword = 'example password 1';
-    const testNip19Text = 'nprivatethread1194wtsp370e9hc8waecwda6yf3hc5aqnk3wwe2t7smt9c0zhq6wdpuutlck42yepz4kqrjw329tdcm94sh34hss346ssplc9ceqgrug6rrja3phd2jqwe5fx598wxqv4eug89kxrv6er98u3fwyk7uas0cpgqjsavpna75wwj256pw047gaztlynex674zmh5p7axw2frpjmvqdu97hpyk2j5g7yatmkzejkrhfjnd2gzt4xxc3xtr7vpkh3je098v8xtknxd0t8gn44auh49rqaw9h0e00f2c2l6e7v6s4ak2qtpna5rw3q43aksv';
+    const testNip19Text = 'nprivatethread11nrm6a3wcjgzgh36543xjr3rektc5aqnk3wwe2t7smt9c0zhq6wdx6dg24dp8vd4h5423qqx2l5p562gj854nca6k9tnlnxut7p4z4rzzflxv5c45tx9545ha3np74yfhchrdwaggcf58p7ayc6pklpt09rv0ulngch720xrc7wgt0syg9em8nsrw0mal0k6mrl9pfdyyhjmfx0y9mdt98wrfzpkccqgeaq0zzghkfwrfyygyqfejpzg69q6vekujgnc0n6m0f58azzdz7zn68699k6l78jzw26sqy5lcllretun9fl2tfsc4d93a0';
 
     const testPointer: nip19Extension.PrivateThreadPointer = {
         ownerPubKey: kp.nostrPubKey,
@@ -58,7 +58,7 @@ test('nprivateThreadEncode-with-relays-and-pubkey-encrypt', () => {
     let receiverKey = kp.derive(`m/44'/1237'/0'/588'/2300'`);
     let normalizedReceiverPubKey = receiverKey.publicKey.slice(1);
     let normalizedSenderPubKey = senderKey.publicKey.slice(1);
-    const testNip19Text = 'nprivatethread11teg49gz4edgnnlsdlrah8uvvslc5aqnk3wwe2t7smt9c0zhq6wdqs7qkxpnj376k5r2r7jerm6ps52t4tfqdlul3w7ysffvag6udx6qh5t5fyrs3k87fm993r26xyf870kg50300wdrc6x4cxxpd8k6pkxa5ju8fnwzgdh9xywrr8g7602aj6egdrzdfjq60tjdl3l7k064w0fy225x0tn03swd4c2vsvhslgy0l368gujvj9sxp3m497glzpmg8j7qpm5smxkfu44zwnjng98pa20e5sk4wctqn8j88f70czf2jv73n2slm6mfe5gv8p9xd6qnyqynqpcy2uajwvd4353fzkznwsfyk69uaqpnwn8t9g3l74exdy0342u5ntwgrhkpn7c8tqnfqe6r576ctvjnkycsruzcma4es7q8fqeew';
+    const testNip19Text = 'nprivatethread11y30jx3xzw5mwtpstgxpkdg44cmc5aqnk3wwe2t7smt9c0zhq6wdv9vfhf5gxm8vz6hsv647qcnx93sn9neu4p0ge77pxjs9sz9zlxtt8r2z4mf2srtpvj5w92u7zgqgdsut76j92tu8uay2vw9n3e4zqr6yz3af0zhessh7zq3ply9sdwsuz6pws8mdrxst63auxd6jc46vfc7pyjs9uqt0tax9pn275zd3j68rgk9ekfjp7f03nhhaxk83ta8au63tskgd73cz0ty8fu8ckh9zqkk7nktmnjyatgtq7aga9hwus86gl04jwpk764my48y676r3r2jsd0hcyayuhdzqzdudr2x3fqnph8rr55utdcce0qzrfkxjzaurqc7zmlzrng8u40uxxw4vftfqnuarrw6vqzym28gqg28sfpvagkyyq';
 
     const testPointer: nip19Extension.PrivateThreadPointer = {
         ownerPubKey: kp.nostrPubKey,

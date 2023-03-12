@@ -4,7 +4,6 @@ import { Buffer } from 'buffer';
 import { hmacSha512, sha256, hash160 } from '../util';
 import { Versions, Bip32NetworkInfo } from './Versions';
 import * as secp from '@noble/secp256k1';
-
 // tslint:disable: quotemark max-line-length
 const HARDENED_KEY_OFFSET = 0x80000000;
 
@@ -30,6 +29,10 @@ export class HDKey {
     constructor(params: HDKeyConstructorParams) {
         if (!params.privateKey && !params.publicKey) {
             throw new Error('either private key or public key must be provided');
+        } else if (params.privateKey && params.privateKey.length !== 32) {
+            throw new Error('private key must be 32 bytes');
+        } else if (params.publicKey && (params.publicKey.length !== 33 && params.publicKey.length !== 65)) {
+            throw new Error('private key must be 33 or 65 bytes');
         }
         if (params.privateKey) {
             this._privateKey = params.privateKey;
@@ -41,11 +44,16 @@ export class HDKey {
         this._depth = params.depth || 0;
         this._index = params.index || 0;
         if (params.parentFingerprint) this._parentFingerprint = params.parentFingerprint;
+        if (!this.depth) {
+            if (this.parentFingerprint || this.index) {
+              throw new Error('HDKey: zero depth with non-zero index/parent fingerprint');
+            }
+          }
         this._keyIdentifier = hash160(this._publicKey);
         this._version = params.version || Versions.bitcoinMain;
     }
-    static parseMasterSeed(seed: Uint32Array, version: Bip32NetworkInfo): HDKey {
-        const i = hmacSha512(Buffer.from('Bitcoin seed'), Buffer.from(seed));
+    static parseMasterSeed(seed: Buffer, version: Bip32NetworkInfo): HDKey {
+        const i = hmacSha512(Buffer.from('Bitcoin seed'), seed);
         const iL = i.slice(0, 32);
         const iR = i.slice(32);
         return new HDKey({ privateKey: iL, chainCode: iR, version: version });
@@ -56,7 +64,7 @@ export class HDKey {
         if (decoded.length > 112) {
             throw new Error('invalid extended key');
         }
-        const version = key.length === 99 ? Versions.animiqAPI3 : Versions.animiqAPI2;
+        const version = key.length === 99 ? Versions.nip76API1 : Versions.bitcoinMain;
         const checksum = decoded.slice(-4);
         const buf = decoded.slice(0, -4);
         if (!sha256(sha256(buf)).slice(0, 4).equals(checksum)) {
@@ -97,6 +105,9 @@ export class HDKey {
             version
         });
     }
+    static fromJSON(json: { xpriv: string }): HDKey {
+        return HDKey.parseExtendedKey(json.xpriv);
+    }
     deriveNewMasterKey(publicKeyHex: string | Buffer): HDKey {
         const i = hmacSha512(this.publicKey, Buffer.from(publicKeyHex));
         const iL = i.slice(0, 32);
@@ -119,7 +130,7 @@ export class HDKey {
         return Base58.encode(Buffer.concat([buf, checksum]));
     }
     get privateKey(): Buffer {
-        return this._privateKey || null;
+        return this._privateKey;
     }
     get publicKey(): Buffer {
         return this._publicKey;
@@ -155,6 +166,12 @@ export class HDKey {
         return this._publicKey.slice(1).toString('hex');
     }
     derive(chain: string): HDKey {
+        if (!this.version.cloaked && !/^[mM]'?/.test(chain)) {
+          throw new Error('Path must start with "m" or "M"');
+        }
+        if (/^[mM]'?$/.test(chain)) {
+          return this;
+        }
         const c = chain.toLowerCase();
         let childKey = this as HDKey;
         c.split('/').forEach(path => {
@@ -229,6 +246,43 @@ export class HDKey {
                 version: this.version
             });
         }
+    }
+    wipePrivateData() {
+        if (this._privateKey) {
+            this._privateKey.fill(0);
+            this._privateKey = null as unknown as Buffer;
+        }
+        return this;
+    }
+    sign(hash: Uint8Array): Buffer {
+        if (!this._privateKey) {
+            throw new Error('No privateKey set!');
+        }
+        if (hash.length !== 32) throw new Error('message length is invalid');
+        return Buffer.from(secp.signSync(hash, this._privateKey!, {
+            canonical: true,
+            der: false,
+        }));
+    }
+    verify(hash: Buffer, signature: Buffer): boolean {
+        if (hash.length !== 32) throw new Error('message length is invalid');
+        if (signature.length !== 64) throw new Error('signature length is invalid');
+        if (!this._publicKey) {
+            throw new Error('No publicKey set!');
+        }
+        let sig;
+        try {
+            sig = secp.Signature.fromCompact(signature);
+        } catch (error) {
+            return false;
+        }
+        return secp.verify(sig, hash, this.publicKey);
+    }
+    toJSON(): { xpriv: string; xpub: string } {
+        return {
+            xpriv: this.extendedPrivateKey!,
+            xpub: this.extendedPublicKey,
+        };
     }
     createIndexesFromWord(word: string, length = 16): Int32Array {
         const hash0 = sha256(word);

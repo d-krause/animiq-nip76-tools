@@ -6,7 +6,7 @@ import { HDKey, Versions } from '../keys';
 import { PrivateThread, ThreadKeySet } from '../content';
 
 interface WalletCostructorParams {
-    randoms?: Uint32Array;
+    randoms?: Buffer;
     storage?: WalletStorage;
 }
 
@@ -54,7 +54,7 @@ export class Wallet {
 
     private init(params: WalletCostructorParams): void {
         if (params.randoms) {
-            this.master = HDKey.parseMasterSeed(params.randoms, Versions.animiqAPI3);
+            this.master = HDKey.parseMasterSeed(params.randoms, Versions.nip76API1);
             this.setLockword('');
         } else if (params.storage) {
             this.master = HDKey.parseExtendedKey(params.storage.k);
@@ -89,7 +89,7 @@ export class Wallet {
         }
         const randoms = new Uint32Array(66);
         window.crypto.getRandomValues(randoms);
-        this.init({ randoms: randoms });
+        this.init({ randoms: Buffer.from(randoms) });
         return this.master;
     }
 
@@ -167,7 +167,7 @@ export class Wallet {
             const keyParams = {
                 chainCode: decrypted.slice(0, 32),
                 privateKey: decrypted.slice(33, 65),
-                version: Versions.animiqAPI3
+                version: Versions.nip76API1
             };
 
             this.master = new HDKey(keyParams);
@@ -214,9 +214,9 @@ export class Wallet {
     }
 
     private createThread(keyset: ThreadKeySet): PrivateThread {
-        const thread = PrivateThread.default;
+        const thread = new PrivateThread();
         thread.v = 3;
-        thread.p = {
+        thread.decryptedContent = {
             name: 'Loading Thread Info ...',
             last_known_index: 0
         };
@@ -238,7 +238,7 @@ export class Wallet {
             const pp = this.pproot.deriveChildKey(ppOffset, true);
             const ap = this.aproot.deriveChildKey(apOffset, true);
             const sp = this.sproot.deriveChildKey(spOffset, true);
-            keyset = { pp: pp, ap: ap, sp: sp, ver: Versions.animiqAPI3 };
+            keyset = { pp: pp, ap: ap, sp: sp, ver: Versions.nip76API1 };
             this.threads = [...this.threads, this.createThread(keyset)];
         }
         this.threads[index].ownerPubKey = this.ownerPubKey;

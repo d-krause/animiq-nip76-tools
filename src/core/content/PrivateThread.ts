@@ -23,29 +23,22 @@ export interface IThreadPayload {
     name?: string;
     pic?: string;
     description?: string;
-    is_public?: boolean;
     created_at?: number
     last_known_index: number;
 }
 
 export class PrivateThread extends ContentDocument {
 
-    static override get default() {
-        return new PrivateThread(undefined, undefined);
-    }
-
-    override p!: IThreadPayload;
-    ownerPubKey!: string;
+    override decryptedContent!: IThreadPayload;
     pp!: HDKey;
-    ready = false;
     indexMap = new ThreadIndexMap();
     posts = [] as PostDocument[];
     following = [] as PrivateThread[];
 
     static fromPointer(pointer: PrivateThreadPointer): PrivateThread {
-        const ap = new HDKey({ publicKey: pointer.addresses.pubkey, chainCode: pointer.addresses.chain, version: Versions.animiqAPI3 });
-        const sp = new HDKey({ publicKey: pointer.secrets.pubkey, chainCode: pointer.secrets.chain, version: Versions.animiqAPI3 });
-        const thread = PrivateThread.default;
+        const ap = new HDKey({ publicKey: pointer.addresses.pubkey, chainCode: pointer.addresses.chain, version: Versions.nip76API1 });
+        const sp = new HDKey({ publicKey: pointer.secrets.pubkey, chainCode: pointer.secrets.chain, version: Versions.nip76API1 });
+        const thread = new PrivateThread();
         thread.ownerPubKey = pointer.ownerPubKey;
         thread.indexMap = new ThreadIndexMap();
         thread.indexMap.post = IndexDocument.createIndex(
@@ -59,7 +52,7 @@ export class PrivateThread extends ContentDocument {
         thread.v = 3;
         thread.address = Address.from(ap.publicKey, ContentDocumentType.Profile, ap.version);
         thread.a = thread.address.value;
-        thread.p = {
+        thread.decryptedContent = {
             last_known_index: 0
         };
         return thread;
@@ -107,27 +100,5 @@ export class PrivateThread extends ContentDocument {
                 chain: this.indexMap.post.sp.chainCode
             }
         }, secret);
-    }
-
-    override toSaveTip(): PrivateThread {
-        const saveTip = super.toSaveTip() as any;
-        saveTip.pp = this.pp ? this.pp.extendedPublicKey : undefined;
-        // if (this.isPublic === true && this.indexMap.post) {
-        //     saveTip.indexes = {
-        //         post: this.indexMap.post.toSaveTip()
-        //     };
-        // }
-        return saveTip;
-    }
-
-    override toDataDocument() {
-        const dd = super.toDataDocument() as any;
-        dd.pp = this.pp ? this.pp.extendedPublicKey : undefined;
-        // if (this.isPublic === true && this.indexMap.post) {
-        //     dd.ix = {
-        //         post: this.indexMap.post.a
-        //     };
-        // }
-        return dd;
     }
 }

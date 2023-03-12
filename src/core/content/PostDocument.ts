@@ -5,8 +5,7 @@ import { HDKey, HDKissDocumentType } from '../keys';
 import { PrivateThread } from './PrivateThread';
 
 export class PostDocument extends ContentDocument {
-    override p!: IPostPayload;
-
+    override decryptedContent!: IPostPayload;
     ownerPubKey!: string;
     nostrEvent: any;
     thread!: PrivateThread;
@@ -15,10 +14,6 @@ export class PostDocument extends ContentDocument {
     reactions!: PostDocument[];
     repliesIndex!: IndexDocument;
     replies!: PostDocument[];
-
-    static override get default() {
-        return new PostDocument(undefined, undefined);
-    }
 
     override setKeys(ap: HDKey, sp: HDKey) {
 
@@ -58,11 +53,9 @@ export interface IPostPayload {
     full_picture?: string;
     link?: string;
     message?: string;
-
     authorPubKey?: string;
     sig?: string;
     type?: 0 | 1 | 2;  //Post|Reaction|Reply
-    // privacy?:      Privacy;
 }
 
 export interface Attachments {

@@ -47,7 +47,7 @@ export class HDKissAddress {
             const type = _address.slice(0, 2);
             const check = parseInt(_address.slice(2, 4), 10);
             const base32 = _address.slice(-32);
-            if (version === Versions.animiqAPI3) {
+            if (version === Versions.nip76API1) {
                 const iban = (98 - HDKissAddress._ibanCheck(base32 + type + version.networkId + '00'));
                 return iban === check;
             } else {
