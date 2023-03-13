@@ -1,24 +1,24 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
-import { Buffer } from 'buffer';
-import { hash160, uint8ArrayFromBuffer } from '../util';
+import { hash160 } from '../util';
 import { sha256 } from '@noble/hashes/sha256';
 import { Bip32NetworkInfo, Versions } from './Versions';
 import { HDKissDocumentType } from './HDKissDocumentType';
 import * as secp from '@noble/secp256k1';
 import { base64, bytesToString, utf8 } from '@scure/base'
+import { concatBytes, createView } from '@noble/hashes/utils';
 
 export interface HDKissAddressConstructorParams {
-    publicKey: Buffer;
+    publicKey: Uint8Array;
     type: HDKissDocumentType;
     version: Bip32NetworkInfo;
 }
 
 export class HDKissAddress {
 
-    _publicKey: Buffer;
+    _publicKey: Uint8Array;
     _version: Bip32NetworkInfo;
     _type: HDKissDocumentType;
-    _rawAddress!: Buffer;
+    _rawAddress!: Uint8Array;
     _addressValue!: string;
     _formatted!: string;
     _display!: string;
@@ -33,7 +33,7 @@ export class HDKissAddress {
         this._type = params.type;
     }
 
-    static from(publicKey: Buffer, type: HDKissDocumentType, version: Bip32NetworkInfo): HDKissAddress {
+    static from(publicKey: Uint8Array, type: HDKissDocumentType, version: Bip32NetworkInfo): HDKissAddress {
         return new HDKissAddress({ publicKey, version, type });
     }
 
@@ -81,28 +81,28 @@ export class HDKissAddress {
         }
     }
 
-    async encrypt(data: string, key: Buffer, version: number): Promise<string> {
+    async encrypt(data: string, key: Uint8Array, version: number): Promise<string> {
         const iv2 = sha256.create().update(this.publicKey).digest().slice(0, 16);
-        const secretBytes = uint8ArrayFromBuffer(key.slice(0, 32));
+        const secretBytes = key.slice(0, 32);
         const alg = { name: 'AES-GCM', iv: iv2, length: 256 } as AesKeyAlgorithm;
         const secretKey = await window.crypto.subtle.importKey('raw', secretBytes, alg, false, ['encrypt']);
-        const encrypted = new Uint8Array(await window.crypto.subtle.encrypt(alg, secretKey, utf8.decode(data)));
+        const encrypted = new Uint8Array(await window.crypto.subtle.encrypt(alg, secretKey, new TextEncoder().encode(data)));
         const tempCrap = secp.utils.concatBytes(encrypted.slice(16), encrypted.slice(0, 16));
         const stored = base64.encode(tempCrap);
         return stored;
     }
 
-    async decrypt(data: string, key: Buffer, version: number): Promise<string> {
+    async decrypt(data: string, key: Uint8Array, version: number): Promise<string> {
         try {
             const encrypted = base64.decode(data);
             const bdata = secp.utils.concatBytes(encrypted.slice(16), encrypted.slice(0, 16));
             const iv = sha256.create().update(this.publicKey).digest().slice(0, 16);
-            const secret = uint8ArrayFromBuffer(key.slice(0, 32));
+            const secret = key.slice(0, 32);
             const alg = { name: 'AES-GCM', iv: iv, length: 256 } as AesKeyAlgorithm;
             const secretKey = await window.crypto.subtle.importKey('raw', secret, alg, false, ['decrypt']);
             const decrypted = new Uint8Array(await window.crypto.subtle.decrypt(alg, secretKey, bdata));
             if (decrypted[0] == 123 && decrypted[decrypted.length - 1] == 125) {
-                return utf8.encode(decrypted);
+                return new TextDecoder().decode(decrypted);
             } else {
                 return `{ "imageUrl": "${window.URL.createObjectURL(new Blob([decrypted], { type: 'image/png' }))}" }`
             }
@@ -112,19 +112,17 @@ export class HDKissAddress {
         }
     }
 
-    get publicKey(): Buffer {
+    get publicKey(): Uint8Array {
         return this._publicKey;
     }
 
-    get rawAddress(): Buffer {
+    get rawAddress(): Uint8Array {
         if (!this._rawAddress) {
             const hash = hash160(this._publicKey);
-            const prefixedHash = Buffer.alloc(1 + hash.length);
-            prefixedHash.writeUInt8(this._version.networkId, 0);
-            hash.copy(prefixedHash, 1);
-            // const checksum = sha256(sha256(prefixedHash)).slice(0, 4);
-            // this._rawAddress = Buffer.concat([prefixedHash, checksum]);
-            this._rawAddress = prefixedHash;
+            const prefixedHash = new Uint8Array(1);
+            const phv = createView(prefixedHash);
+            phv.setUint8(0,this._version.networkId);
+            this._rawAddress = concatBytes(prefixedHash, hash);
         }
         return this._rawAddress;
     }

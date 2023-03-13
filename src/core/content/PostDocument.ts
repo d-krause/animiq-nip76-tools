@@ -67,7 +67,7 @@ export interface Attachments {
 export interface AttachmentsDatum {
     ogUrl?: string;
     ogImageUrl?: string;
-    ogImageBytes?: Buffer;
+    ogImageBytes?: Uint8Array;
     ogTitle?: string;
     ogDescription?: string;
     ogSiteName?: string;

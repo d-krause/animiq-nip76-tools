@@ -1,5 +1,4 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
-// re: Buffer - vscode pretends it doesn't need this Buffer import, but tsc complains when building
 import * as nostrTools from 'nostr-tools';
 import { HDKissAddress as Address, HDKey } from '../keys';
 

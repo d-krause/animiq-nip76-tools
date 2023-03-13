@@ -1,5 +1,4 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
-import { Buffer } from 'buffer';
 import { ContentDocument } from './ContentDocument';
 import { IndexDocument, IndexPermission } from './IndexDocument';
 import { PostDocument } from './PostDocument';
@@ -88,7 +87,7 @@ export class PrivateThread extends ContentDocument {
         return resetKeys;
     }
 
-    async getThreadPointer(secret: string | Buffer[] = ''): Promise<string> {
+    async getThreadPointer(secret: string | Uint8Array[] = ''): Promise<string> {
         return nprivateThreadEncode({
             ownerPubKey: this.ownerPubKey,
             addresses: {

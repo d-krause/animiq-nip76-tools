@@ -14,16 +14,15 @@
   },
   "keywords": [],
   "dependencies": {
-    "bs58": "^5.0.0",
-    "buffer": "^6.0.3",
-    "stream-browserify": "^3.0.0"
+    "bs58": "^5.0.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^5.16.5",
     "@types/jest": "^29.4.0",
-    "@types/node": "^18.14.4",
+    "@types/node": "^18.15.1",
     "@types/webpack": "^5.28.0",
     "@webpack-cli/generators": "^3.0.1",
+    "assert": "^2.0.0",
     "clean-webpack-plugin": "^4.0.0",
     "copy-webpack-plugin": "^11.0.0",
     "declaration-bundler-webpack-plugin": "^1.0.3",

@@ -1,5 +1,4 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
-import { Buffer } from 'buffer';
 import { ContentDocument } from './ContentDocument';
 import { HDKey, HDKissAddress as Address, HDKissDocumentType as ContentDocumentType } from '../keys';
 
@@ -26,12 +25,6 @@ export class IndexDocument extends ContentDocument {
         return rtn;
     }
 }
-
-export interface EncryptionKeys {
-    address: Address;
-    secret: Buffer;
-}
-
 export interface IIndexPayload {
     name: string;
     type: ContentDocumentType;

@@ -1,26 +1,25 @@
 
 import * as secp256k1 from '@noble/secp256k1'
-import { nip19Extension } from "./index";
-import { HDKey, Versions } from "../core";
-import { fixtures } from '../core/keys/HDKey.spec';
-
-let kp = HDKey.parseMasterSeed(Buffer.from(fixtures[0].seed), Versions.bitcoinMain);
-let ap = kp.derive(`m/44'/1237'/0'/123'/456'`);
-let sp = kp.derive(`m/44'/1237'/0'/789'/999'`);
+import { nip19Extension } from "../src/nostr-tools";
+import { HDKey, Versions } from "../src/core";
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 
 const realRandom = secp256k1.utils.randomBytes;
-const mockRandom = (length: number | undefined) => {
+secp256k1.utils.randomBytes = (length: number | undefined) => {
     return Uint8Array.from([241, 78, 130, 118, 139, 157, 149, 47, 208, 218, 203, 135, 138, 224, 211, 154]);
 };
 
-xdescribe('', () => {
+let kp = HDKey.parseMasterSeed(hexToBytes('000102030405060708090a0b0c0d0e0f'), Versions.bitcoinMain);
+let ap = kp.derive(`m/44'/1237'/0'/123'/456'`);
+let sp = kp.derive(`m/44'/1237'/0'/789'/999'`);
 
-    test('nprivateThreadEncode', async () => {
 
-        secp256k1.utils.randomBytes = mockRandom;
+describe('nprivatethread1', () => {
+
+    it('it should encode and decode with a password', async () => {
 
         const testPassword = 'example password 1';
-        const testNip19Text = 'nprivatethread11nrm6a3wcjgzgh36543xjr3rektc5aqnk3wwe2t7smt9c0zhq6wdx6dg24dp8vd4h5423qqx2l5p562gj854nca6k9tnlnxut7p4z4rzzflxv5c45tx9545ha3np74yfhchrdwaggcf58p7ayc6pklpt09rv0ulngch720xrc7wgt0syg9em8nsrw0mal0k6mrl9pfdyyhjmfx0y9mdt98wrfzpkccqgeaq0zzghkfwrfyygyqfejpzg69q6vekujgnc0n6m0f58azzdz7zn68699k6l78jzw26sqy5lcllretun9fl2tfsc4d93a0';
+        const testNip19Text = 'nprivatethread11798gya5tnk2jl5x6ewrc4cxnntshdtj0frwsapaq4ujl02drrpt8hvu8nlsgurhcdzngrvw3v6d2xs78jtqy76cen4gg6uy2n9f55qecxyql53f2zumty8ahnrp2738q8qtfx5dqmmh48g5wrh2c5092tk6u6hz0wu4e8pvtmzzgenxvscgk0p9fvdyfcv4pns5nzaqyz4klfrj4s0hdtflxeu6ktj42szwguhusxsd55ygcmsmmvf8tukpex89870pezpe2zskf78g0h0gqjfks4xstpxthjk7vcwh59zeumd9v5kkv4xqlswhxz';
 
         const testPointer: nip19Extension.PrivateThreadPointer = {
             ownerPubKey: kp.nostrPubKey,
@@ -41,24 +40,20 @@ xdescribe('', () => {
         expect(nip19DecodeResult!.type).toBe('nprivatethread1');
         const resultPointer = nip19DecodeResult!.data as nip19Extension.PrivateThreadPointer;
         expect(resultPointer.ownerPubKey).toBe(testPointer.ownerPubKey);
-        expect(resultPointer.addresses.pubkey.toString('hex')).toBe(testPointer.addresses.pubkey.toString('hex'));
-        expect(resultPointer.addresses.chain.toString('hex')).toBe(testPointer.addresses.chain.toString('hex'));
-        expect(resultPointer.secrets!.pubkey.toString('hex')).toBe(testPointer.secrets!.pubkey.toString('hex'));
-        expect(resultPointer.secrets!.chain.toString('hex')).toBe(testPointer.secrets!.chain.toString('hex'));
-
-        secp256k1.utils.randomBytes = realRandom;
+        expect(bytesToHex(resultPointer.addresses.pubkey)).toBe(bytesToHex(testPointer.addresses.pubkey));
+        expect(bytesToHex(resultPointer.addresses.chain)).toBe(bytesToHex(testPointer.addresses.chain));
+        expect(bytesToHex(resultPointer.secrets!.pubkey)).toBe(bytesToHex(testPointer.secrets!.pubkey));
+        expect(bytesToHex(resultPointer.secrets!.chain)).toBe(bytesToHex(testPointer.secrets!.chain));
     })
 
 
-    test('nprivateThreadEncode-with-relays-and-pubkey-encrypt', async () => {
-
-        secp256k1.utils.randomBytes = mockRandom;
+    it('it should work with key pairs and relays ', async () => {
 
         let senderKey = kp.derive(`m/44'/1237'/0'/867'/5309'`);
         let receiverKey = kp.derive(`m/44'/1237'/0'/588'/2300'`);
         let normalizedReceiverPubKey = receiverKey.publicKey.slice(1);
         let normalizedSenderPubKey = senderKey.publicKey.slice(1);
-        const testNip19Text = 'nprivatethread11y30jx3xzw5mwtpstgxpkdg44cmc5aqnk3wwe2t7smt9c0zhq6wdv9vfhf5gxm8vz6hsv647qcnx93sn9neu4p0ge77pxjs9sz9zlxtt8r2z4mf2srtpvj5w92u7zgqgdsut76j92tu8uay2vw9n3e4zqr6yz3af0zhessh7zq3ply9sdwsuz6pws8mdrxst63auxd6jc46vfc7pyjs9uqt0tax9pn275zd3j68rgk9ekfjp7f03nhhaxk83ta8au63tskgd73cz0ty8fu8ckh9zqkk7nktmnjyatgtq7aga9hwus86gl04jwpk764my48y676r3r2jsd0hcyayuhdzqzdudr2x3fqnph8rr55utdcce0qzrfkxjzaurqc7zmlzrng8u40uxxw4vftfqnuarrw6vqzym28gqg28sfpvagkyyq';
+        const testNip19Text = 'nprivatethread11798gya5tnk2jl5x6ewrc4cxnng0xwmx9m72sc7p4w00j4cltts674t4wx7y8rqyqhhdufraepqlmuf35zqrjn0swvx3h2r07kh86cglrgatg0an84ha73h5gjrdgc3acdqclhtrs8zw8l758t0v73ttl02jzj0gte0zztzye86aknqlq4jm0x4dq8dwl2nehakuxlrf5a6hq5nk6kwa9y2ws9jjd8l52xa03hacsxlhtgdeq4w2t2ss0pmv0kc2gss7c4vtzygc9dtszewzsk7t28uxemluqzjldsedvjfzt6fcaeqq2rafnhmxmhumarf62mjdw6npa4d8al0epqe0xlwun8d8ekyph27gkzxeh3dnzurmc9xh4uru97nqnt8nqrvs85qmw66vjav7j5rxamqj0h5nfsm3x63zapv3j4962';
 
         const testPointer: nip19Extension.PrivateThreadPointer = {
             ownerPubKey: kp.nostrPubKey,
@@ -76,21 +71,20 @@ xdescribe('', () => {
             ]
         };
         const privatethread1 = await nip19Extension.nprivateThreadEncode(testPointer, [normalizedReceiverPubKey, senderKey.privateKey]);
-
         expect(privatethread1).toEqual(testNip19Text);
 
         let nip19DecodeResult = await nip19Extension.decode(testNip19Text, [normalizedSenderPubKey, receiverKey.privateKey]);
         expect(nip19DecodeResult!.type).toBe('nprivatethread1');
+
         const resultPointer = nip19DecodeResult!.data as nip19Extension.PrivateThreadPointer;
         expect(resultPointer.ownerPubKey).toBe(testPointer.ownerPubKey);
-        expect(resultPointer.addresses.pubkey.toString('hex')).toBe(testPointer.addresses.pubkey.toString('hex'));
-        expect(resultPointer.addresses.chain.toString('hex')).toBe(testPointer.addresses.chain.toString('hex'));
-        expect(resultPointer.secrets!.pubkey.toString('hex')).toBe(testPointer.secrets!.pubkey.toString('hex'));
-        expect(resultPointer.secrets!.chain.toString('hex')).toBe(testPointer.secrets!.chain.toString('hex'));
+        expect(bytesToHex(resultPointer.addresses.pubkey)).toBe(bytesToHex(testPointer.addresses.pubkey));
+        expect(bytesToHex(resultPointer.addresses.chain)).toBe(bytesToHex(testPointer.addresses.chain));
+        expect(bytesToHex(resultPointer.secrets!.pubkey)).toBe(bytesToHex(testPointer.secrets!.pubkey));
+        expect(bytesToHex(resultPointer.secrets!.chain)).toBe(bytesToHex(testPointer.secrets!.chain));
         expect(resultPointer.relays![0]).toBe(testPointer.relays![0]);
         expect(resultPointer.relays![1]).toBe(testPointer.relays![1]);
 
-        secp256k1.utils.randomBytes = realRandom;
     })
 
 });

@@ -1,13 +1,13 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
-import { Buffer } from 'buffer';
 import { base64 } from '@scure/base';
 import * as secp from '@noble/secp256k1';
 import { sha256 as sha256x } from '@noble/hashes/sha256';
 import { HDKey, Versions } from '../keys';
 import { PrivateThread, ThreadKeySet } from '../content';
+import { bytesToHex, concatBytes } from '@noble/hashes/utils';
 
 interface WalletCostructorParams {
-    randoms?: Buffer;
+    randoms?: Uint8Array;
     storage?: WalletStorage;
 }
 
@@ -40,11 +40,18 @@ export class Wallet {
 
     private constructor() { }
 
-    static async create() {
+    static create() {
+        const wallet = new Wallet();
+        wallet.isGuest = true;
+        wallet.reKey();
+        return wallet;
+    }
+
+    static async fromStorage() {
+        const wallet = new Wallet();
         const storedWallet = window.localStorage.getItem(WalletStorage.backupKey);
         const sessionWallet = window.sessionStorage.getItem(WalletStorage.sessionKey);
         const sessionKey = getCookie(WalletStorage.sessionIdName);
-        const wallet = new Wallet();
         if (sessionWallet && sessionKey && await wallet.readKey(sessionKey, 'session', null)) {
             wallet.saveWallet();
             wallet.isInSession = true;
@@ -72,7 +79,7 @@ export class Wallet {
             await this.saveKey(privateKey, 'backup');
         }
         if (this.sessionExpireMinutes) {
-            const sessionKey = Buffer.from(window.crypto.getRandomValues(new Uint8Array(32))).toString('hex');
+            const sessionKey = bytesToHex(window.crypto.getRandomValues(new Uint8Array(32)));
             const expires = (new Date(Date.now() + this.sessionExpireMinutes * 60000)).toUTCString();
             document.cookie = `${WalletStorage.sessionIdName}=${sessionKey}; expires=${expires}; path=/;`
             this.isInSession = await this.saveKey(sessionKey, 'session');
@@ -90,9 +97,9 @@ export class Wallet {
         if (!this.isGuest) {
             throw new Error('Existing Wallet cannot be rekeyed.');
         }
-        const randoms = new Uint32Array(66);
+        const randoms = new Uint8Array(256);
         window.crypto.getRandomValues(randoms);
-        this.init({ randoms: Buffer.from(randoms) });
+        this.init({ randoms: randoms });
         return this.master;
     }
 
@@ -111,7 +118,7 @@ export class Wallet {
         }
         const keyBuffer = secp.utils.concatBytes(this.master.chainCode, this.master.privateKey);
         const cryptoBuffer = saveType === 'session'
-            ? Buffer.concat([keyBuffer, new Uint8Array(this.locknums.buffer)])
+            ? concatBytes(keyBuffer, new Uint8Array(this.locknums.buffer))
             : keyBuffer;
         const iv = window.crypto.getRandomValues(new Uint8Array(16));
         const secretBytes = secp.utils.hexToBytes(secret);
@@ -140,16 +147,16 @@ export class Wallet {
 
             const encrypted = base64.decode(stored);
             const iv = encrypted.slice(0, 16);
-            const buffer = encrypted.slice(16);
+            const data = encrypted.slice(16);
             const secretBytes = secp.utils.hexToBytes(secret);
             const secretHash = sha256x.create().update(secretBytes).digest();
             const alg = { name: 'AES-GCM', iv: iv, length: 256 } as AesKeyAlgorithm;
             const secretKey = await window.crypto.subtle.importKey('raw', secretHash, alg, false, ['decrypt']);
-            const decrypted = await window.crypto.subtle.decrypt(alg, secretKey, buffer);
+            const decrypted = new Uint8Array(await window.crypto.subtle.decrypt(alg, secretKey, data));
 
             const keyParams = {
-                chainCode: Buffer.from(decrypted.slice(0, 32)),
-                privateKey: Buffer.from(decrypted.slice(32, 64)),
+                chainCode: decrypted.slice(0, 32),
+                privateKey: decrypted.slice(32, 64),
                 version: Versions.nip76API1
             };
 
@@ -159,7 +166,7 @@ export class Wallet {
             if (lockword !== null) {
                 this.setLockword(lockword);
             } else {
-                this.locknums = new Int32Array(decrypted.slice(64));
+                this.locknums = new Int32Array(decrypted.slice(64).buffer);
                 this.setLockword(null as any as string, true);
             }
             success = true;

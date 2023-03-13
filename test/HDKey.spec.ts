@@ -1,14 +1,12 @@
-import assert, { deepStrictEqual, throws } from 'assert';
-import { HDKey, Versions } from '../index';
+import * as nodeCrypto from 'crypto';
+import { bytesToHex, hexToBytes, toBytes, utf8ToBytes } from '@noble/hashes/utils';
 import * as secp from '@noble/secp256k1';
 import { base58 } from '@scure/base';
-
-import * as bip39 from '@scure/bip39';
-import { wordlist } from '@scure/bip39/wordlists/english';
-import { hmacSha512, uint8ArrayFromBuffer } from '../util';
-
+import assert, { deepStrictEqual, throws } from 'assert';
+import { HDKey, Versions } from '../src';
+import { hmacSha512 } from '../src/core/util';
 // from https://github.com/cryptocoinjs/hdkey/blob/42637e381bdef0c8f785b14f5b66a80dad969514/test/fixtures/hdkey.json, adding some new network type versions
-export const fixtures = [
+let fixtures = [
     {
         seed: '000102030405060708090a0b0c0d0e0f',
         path: 'm',
@@ -157,28 +155,29 @@ export const fixtures = [
         "animiqV2public": "apubFismZF2zKZV7iudAr3Nb6KLmjBJ9URgqzumQW77rHvaLDh7V8d1kNLPKq1aVtS3M9ibM5imc3QFSf7kMakSNCFwKpyZATHpgyPotJFBfLAk"
     }
 ];
+
 if (0) {
     fit('bip39 ', () => {
         for (var i = 0; i < 1; i++) {
 
             let key = HDKey.parseExtendedKey(fixtures[0].nip76private).derive(`/m/0'/0'`);
-            const hash1 = hmacSha512(key.privateKey, Buffer.from('nip76'));
+            const hash1 = hmacSha512(key.privateKey, toBytes('nip76'));
             key = key.derive(`0'/0'`);
             const hash2 = hmacSha512(key.privateKey, hash1);
             key = key.derive(`0'/0'`);
             const hash3 = hmacSha512(key.privateKey, hash2);
 
-            const locknums = Uint32Array.from([
-                hash1.readInt32BE(0), hash1.readInt32BE(8), hash1.readInt32BE(16), hash1.readInt32BE(24),
-                hash1.readInt32BE(32),hash1.readInt32BE(40), hash1.readInt32BE(48), hash1.readInt32BE(56), 
-                hash2.readInt32BE(0), hash2.readInt32BE(8), hash2.readInt32BE(16), hash2.readInt32BE(24),
-                hash2.readInt32BE(32),hash2.readInt32BE(40), hash2.readInt32BE(48), hash2.readInt32BE(56), 
-                hash3.readInt32BE(0), hash3.readInt32BE(8), hash3.readInt32BE(16), hash3.readInt32BE(24),
-                hash3.readInt32BE(32),hash3.readInt32BE(40), hash3.readInt32BE(48), hash3.readInt32BE(56), 
-            ])
+            // const locknums = Uint32Array.from([
+            //     hash1.readInt32BE(0), hash1.readInt32BE(8), hash1.readInt32BE(16), hash1.readInt32BE(24),
+            //     hash1.readInt32BE(32),hash1.readInt32BE(40), hash1.readInt32BE(48), hash1.readInt32BE(56), 
+            //     hash2.readInt32BE(0), hash2.readInt32BE(8), hash2.readInt32BE(16), hash2.readInt32BE(24),
+            //     hash2.readInt32BE(32),hash2.readInt32BE(40), hash2.readInt32BE(48), hash2.readInt32BE(56), 
+            //     hash3.readInt32BE(0), hash3.readInt32BE(8), hash3.readInt32BE(16), hash3.readInt32BE(24),
+            //     hash3.readInt32BE(32),hash3.readInt32BE(40), hash3.readInt32BE(48), hash3.readInt32BE(56), 
+            // ])
 
-            const words1 = bip39.entropyToMnemonic(key.privateKey, wordlist);
-            const words2 = bip39.entropyToMnemonic(key.chainCode, wordlist);
+            // const words1 = bip39.entropyToMnemonic(key.privateKey, wordlist);
+            // const words2 = bip39.entropyToMnemonic(key.chainCode, wordlist);
 
 
             // const mw = 'fooby drougey';
@@ -189,21 +188,23 @@ if (0) {
         }
     });
 }
+
 describe('hdkey', function () {
     describe('+ parseMasterSeed', function () {
         fixtures.forEach(function (f) {
             it('should properly derive the chain path: ' + f.path, function () {
-                const seed = secp.utils.hexToBytes(f.seed)
-                var hdkey = HDKey.parseMasterSeed(seed as Buffer, Versions.bitcoinMain)
+                const seed = hexToBytes(f.seed)
+                var hdkey = HDKey.parseMasterSeed(seed, Versions.bitcoinMain)
                 var childkey = hdkey.derive(f.path)
 
+                const crap = HDKey.parseExtendedKey(f.private);
                 assert.equal(childkey.extendedPrivateKey, f.private)
                 assert.equal(childkey.extendedPublicKey, f.public)
             })
 
             describe('> ' + f.path + ' toJSON() / fromJSON()', () => {
                 it('should return an object read for JSON serialization', () => {
-                    const hdkey = HDKey.parseMasterSeed(Buffer.from(f.seed, 'hex'), Versions.bitcoinMain);
+                    const hdkey = HDKey.parseMasterSeed(hexToBytes(f.seed), Versions.bitcoinMain);
                     const childkey = hdkey.derive(f.path);
                     const obj = {
                         xpriv: f.private,
@@ -223,7 +224,7 @@ describe('hdkey', function () {
         it('should throw an error if incorrect key size', function () {
 
             assert.throws(function () {
-                var hdkey = new HDKey({ privateKey: Buffer.from([1, 2, 3, 4]) })
+                var hdkey = new HDKey({ privateKey: new Uint8Array([1, 2, 3, 4]) })
             }, /key must be 32/)
         })
     })
@@ -231,22 +232,22 @@ describe('hdkey', function () {
     describe('- publicKey', function () {
         it('should throw an error if incorrect key size', function () {
             assert.throws(function () {
-                var hdkey = new HDKey({ publicKey: Buffer.from([1, 2, 3, 4]) })
+                var hdkey = new HDKey({ publicKey: new Uint8Array([1, 2, 3, 4]) })
             }, /key must be 33 or 65/)
         })
 
         it('should not throw if key is 33 bytes (compressed)', function () {
-            var priv = Buffer.from(secp.utils.randomBytes(32));
+            var priv = nodeCrypto.getRandomValues(new Uint8Array(32));
             var pub = secp.getPublicKey(priv, true);
             assert.equal(pub.length, 33)
-            var hdkey = new HDKey({ publicKey: Buffer.from(pub) })
+            var hdkey = new HDKey({ publicKey: new Uint8Array(pub) })
         })
 
         it('should not throw if key is 65 bytes (not compressed)', function () {
-            var priv = Buffer.from(secp.utils.randomBytes(32));
+            var priv = nodeCrypto.getRandomValues(new Uint8Array(32));
             var pub = secp.getPublicKey(priv);
             assert.equal(pub.length, 65)
-            var hdkey = new HDKey({ publicKey: Buffer.from(pub) })
+            var hdkey = new HDKey({ publicKey: new Uint8Array(pub) })
 
         })
     })
@@ -260,12 +261,12 @@ describe('hdkey', function () {
                 assert.equal(hdkey.version.bip32.private, 0x0488ade4)
                 assert.equal(hdkey.version.bip32.public, 0x0488b21e)
                 assert.equal(hdkey.depth, 5)
-                assert.equal(hdkey.parentFingerprint.toString('hex'), '31a507b8')
+                assert.equal(hdkey.parentFingerprint, 0x31a507b8)
                 assert.equal(hdkey.index, 2)
-                assert.equal(hdkey.chainCode.toString('hex'), '9452b549be8cea3ecb7a84bec10dcfd94afe4d129ebfd3b3cb58eedf394ed271')
-                assert.equal(hdkey.privateKey.toString('hex'), 'bb7d39bdb83ecf58f2fd82b6d918341cbef428661ef01ab97c28a4842125ac23')
-                assert.equal(hdkey.publicKey.toString('hex'), '024d902e1a2fc7a8755ab5b694c575fce742c48d9ff192e63df5193e4c7afe1f9c')
-                assert.equal(hdkey.keyIdentifier.toString('hex'), '26132fdbe7bf89cbc64cf8dafa3f9f88b8666220')
+                assert.equal(bytesToHex(hdkey.chainCode), '9452b549be8cea3ecb7a84bec10dcfd94afe4d129ebfd3b3cb58eedf394ed271')
+                assert.equal(bytesToHex(hdkey.privateKey), 'bb7d39bdb83ecf58f2fd82b6d918341cbef428661ef01ab97c28a4842125ac23')
+                assert.equal(bytesToHex(hdkey.publicKey), '024d902e1a2fc7a8755ab5b694c575fce742c48d9ff192e63df5193e4c7afe1f9c')
+                assert.equal(bytesToHex(hdkey.keyIdentifier), '26132fdbe7bf89cbc64cf8dafa3f9f88b8666220')
             })
         })
 
@@ -277,12 +278,12 @@ describe('hdkey', function () {
                 assert.equal(hdkey.version.bip32.private, 0x0488ade4)
                 assert.equal(hdkey.version.bip32.public, 0x0488b21e)
                 assert.equal(hdkey.depth, 5)
-                assert.equal(hdkey.parentFingerprint.toString('hex'), '31a507b8')
+                assert.equal(hdkey.parentFingerprint, 0x31a507b8)
                 assert.equal(hdkey.index, 2)
-                assert.equal(hdkey.chainCode.toString('hex'), '9452b549be8cea3ecb7a84bec10dcfd94afe4d129ebfd3b3cb58eedf394ed271')
+                assert.equal(bytesToHex(hdkey.chainCode), '9452b549be8cea3ecb7a84bec10dcfd94afe4d129ebfd3b3cb58eedf394ed271')
                 assert.equal(hdkey.privateKey, null)
-                assert.equal(hdkey.publicKey.toString('hex'), '024d902e1a2fc7a8755ab5b694c575fce742c48d9ff192e63df5193e4c7afe1f9c')
-                assert.equal(hdkey.keyIdentifier.toString('hex'), '26132fdbe7bf89cbc64cf8dafa3f9f88b8666220')
+                assert.equal(bytesToHex(hdkey.publicKey), '024d902e1a2fc7a8755ab5b694c575fce742c48d9ff192e63df5193e4c7afe1f9c')
+                assert.equal(bytesToHex(hdkey.keyIdentifier), '26132fdbe7bf89cbc64cf8dafa3f9f88b8666220')
             })
         })
     })
@@ -292,24 +293,26 @@ describe('hdkey', function () {
             var key = 'xprvA2nrNbFZABcdryreWet9Ea4LvTJcGsqrMzxHx98MMrotbir7yrKCEXw7nadnHM8Dq38EGfSh6dqA9QWTyefMLEcBYJUuekgW4BYPJcr9E7j'
             var hdkey = HDKey.parseExtendedKey(key)
 
-            var ma = Buffer.alloc(32, 0)
-            var mb = Buffer.alloc(32, 8)
+            var ma = new Uint8Array(32).fill(0);
+            var mb = new Uint8Array(32).fill(8);
             var a = hdkey.sign(ma)
             var b = hdkey.sign(mb)
-            assert.equal(a.toString('hex'), '6ba4e554457ce5c1f1d7dbd10459465e39219eb9084ee23270688cbe0d49b52b7905d5beb28492be439a3250e9359e0390f844321b65f1a88ce07960dd85da06')
-            assert.equal(b.toString('hex'), 'dfae85d39b73c9d143403ce472f7c4c8a5032c13d9546030044050e7d39355e47a532e5c0ae2a25392d97f5e55ab1288ef1e08d5c034bad3b0956fbbab73b381')
+            assert.equal(bytesToHex(a), '6ba4e554457ce5c1f1d7dbd10459465e39219eb9084ee23270688cbe0d49b52b7905d5beb28492be439a3250e9359e0390f844321b65f1a88ce07960dd85da06')
+            assert.equal(bytesToHex(b), 'dfae85d39b73c9d143403ce472f7c4c8a5032c13d9546030044050e7d39355e47a532e5c0ae2a25392d97f5e55ab1288ef1e08d5c034bad3b0956fbbab73b381')
             assert.equal(hdkey.verify(ma, a), true)
             assert.equal(hdkey.verify(mb, b), true)
-            assert.equal(hdkey.verify(Buffer.alloc(32), Buffer.alloc(64)), false)
+            assert.equal(hdkey.verify(new Uint8Array(32), new Uint8Array(64)), false)
             assert.equal(hdkey.verify(ma, b), false)
             assert.equal(hdkey.verify(mb, a), false)
 
+            const badlen = new Uint8Array(99);
+            badlen.fill(0);
             assert.throws(function () {
-                hdkey.verify(Buffer.alloc(99), a)
-            }, /message length is invalid/)
+                hdkey.verify(badlen, a)
+            }, /Expected 32 bytes/)
             assert.throws(function () {
-                hdkey.verify(ma, Buffer.alloc(99))
-            }, /signature length is invalid/)
+                hdkey.verify(ma, badlen)
+            }, /Expected 64 bytes/)
         })
     })
 
@@ -329,7 +332,7 @@ describe('hdkey', function () {
     describe('> when private key integer is less than 32 bytes', function () {
         it('should work', function () {
             var seed = '000102030405060708090a0b0c0d0e0f'
-            var masterKey = HDKey.parseMasterSeed(Buffer.from(seed, 'hex'), Versions.bitcoinMain)
+            var masterKey = HDKey.parseMasterSeed(hexToBytes(seed), Versions.bitcoinMain)
 
             var newKey = masterKey.derive("m/44'/6'/4'")
             var expected = 'xprv9ymoag6W7cR6KBcJzhCM6qqTrb3rRVVwXKzwNqp1tDWcwierEv3BA9if3ARHMhMPh9u2jNoutcgpUBLMfq3kADDo7LzfoCnhhXMRGX3PXDx'
@@ -347,16 +350,16 @@ describe('hdkey', function () {
         it('will include leading zeros when hashing to derive child', function () {
             var key = 'xprv9s21ZrQH143K3ckY9DgU79uMTJkQRLdbCCVDh81SnxTgPzLLGax6uHeBULTtaEtcAvKjXfT7ZWtHzKjTpujMkUd9dDb8msDeAfnJxrgAYhr'
             var hdkey = HDKey.parseExtendedKey(key)
-            assert.equal(hdkey.privateKey.toString('hex'), '00000055378cf5fafb56c711c674143f9b0ee82ab0ba2924f19b64f5ae7cdbfd')
+            assert.equal(bytesToHex(hdkey.privateKey), '00000055378cf5fafb56c711c674143f9b0ee82ab0ba2924f19b64f5ae7cdbfd')
             var derived = hdkey.derive("m/44'/0'/0'/0/0'")
-            assert.equal(derived.privateKey.toString('hex'), '3348069561d2a0fb925e74bf198762acc47dce7db27372257d2d959a9e6f8aeb')
+            assert.equal(bytesToHex(derived.privateKey), '3348069561d2a0fb925e74bf198762acc47dce7db27372257d2d959a9e6f8aeb')
         })
     })
 
     describe('> when private key is null', function () {
         it('extendedPrivateKey should return null and not throw', function () {
             var seed = '000102030405060708090a0b0c0d0e0f'
-            var masterKey = HDKey.parseMasterSeed(Buffer.from(seed, 'hex'), Versions.bitcoinMain)
+            var masterKey = HDKey.parseMasterSeed(hexToBytes(seed), Versions.bitcoinMain)
 
             assert.ok(masterKey.extendedPrivateKey, 'xpriv is truthy')
             masterKey = masterKey.wipePrivateData()
@@ -370,7 +373,7 @@ describe('hdkey', function () {
     })
 
     describe(' - when the path given to derive contains only the master extended key', function () {
-        const hdKeyInstance = HDKey.parseMasterSeed(Buffer.from(fixtures[0].seed, 'hex'), Versions.bitcoinMain)
+        const hdKeyInstance = HDKey.parseMasterSeed(hexToBytes(fixtures[0].seed), Versions.bitcoinMain)
 
         it('should return the same hdkey instance', function () {
             assert.equal(hdKeyInstance.derive('m'), hdKeyInstance)
@@ -383,7 +386,7 @@ describe('hdkey', function () {
     describe(' - when the path given to derive does not begin with master extended key', function () {
         it('should throw an error', function () {
             assert.throws(function () {
-                const hdKeyInstance = HDKey.parseMasterSeed(Buffer.from(fixtures[0].seed, 'hex'), Versions.bitcoinMain)
+                const hdKeyInstance = HDKey.parseMasterSeed(hexToBytes(fixtures[0].seed), Versions.bitcoinMain)
                 hdKeyInstance.derive('123')
             }, /Path must start with "m" or "M"/)
         })
@@ -391,10 +394,10 @@ describe('hdkey', function () {
 
     describe('- after wipePrivateData()', function () {
         it('should not have private data', function () {
-            const hdkey = HDKey.parseMasterSeed(Buffer.from(fixtures[6].seed, 'hex'), Versions.bitcoinMain).wipePrivateData()
+            const hdkey = HDKey.parseMasterSeed(hexToBytes(fixtures[6].seed), Versions.bitcoinMain).wipePrivateData()
             assert.equal(hdkey.privateKey, null)
             assert.equal(hdkey.extendedPrivateKey, null)
-            // assert.throws(() => hdkey.sign(Buffer.alloc(32)), "shouldn't be able to sign")
+            assert.throws(() => hdkey.sign(new Uint8Array(32)), "shouldn't be able to sign")
             const childKey = hdkey.derive('m/0')
             assert.equal(childKey.extendedPublicKey, fixtures[7].public)
             assert.equal(childKey.privateKey, null)
@@ -408,16 +411,16 @@ describe('hdkey', function () {
             assert.equal(hdkey.version.bip32.private, 0x0488ade4)
             assert.equal(hdkey.version.bip32.public, 0x0488b21e)
             assert.equal(hdkey.depth, 5)
-            assert.equal(hdkey.parentFingerprint.toString('hex'), '31a507b8')
+            assert.equal(hdkey.parentFingerprint, 0x31a507b8)
             assert.equal(hdkey.index, 2)
-            assert.equal(hdkey.chainCode.toString('hex'), '9452b549be8cea3ecb7a84bec10dcfd94afe4d129ebfd3b3cb58eedf394ed271')
-            assert.equal(hdkey.publicKey.toString('hex'), '024d902e1a2fc7a8755ab5b694c575fce742c48d9ff192e63df5193e4c7afe1f9c')
-            assert.equal(hdkey.keyIdentifier.toString('hex'), '26132fdbe7bf89cbc64cf8dafa3f9f88b8666220')
+            assert.equal(bytesToHex(hdkey.chainCode), '9452b549be8cea3ecb7a84bec10dcfd94afe4d129ebfd3b3cb58eedf394ed271')
+            assert.equal(bytesToHex(hdkey.publicKey), '024d902e1a2fc7a8755ab5b694c575fce742c48d9ff192e63df5193e4c7afe1f9c')
+            assert.equal(bytesToHex(hdkey.keyIdentifier), '26132fdbe7bf89cbc64cf8dafa3f9f88b8666220')
         })
 
         it('should be able to verify signatures', function () {
-            const fullKey = HDKey.parseMasterSeed(Buffer.from(fixtures[0].seed), Versions.bitcoinMain);
-            const hash = Buffer.alloc(32, 8)
+            const fullKey = HDKey.parseMasterSeed(hexToBytes(fixtures[0].seed), Versions.bitcoinMain);
+            const hash = new Uint8Array(32).fill(8)
             const sig = fullKey.sign(hash);
             const wipedKey = fullKey.wipePrivateData()
             assert.ok(wipedKey.verify(hash, sig))
@@ -433,8 +436,8 @@ describe('hdkey', function () {
     describe('- nip76 parseMasterSeed', function () {
         fixtures.filter(x => x.nip76private && x.nip76public).forEach(function (f) {
             it('should properly derive the chain path: ' + f.path, function () {
-                const seed = secp.utils.hexToBytes(f.seed)
-                var hdkey = HDKey.parseMasterSeed(seed as Buffer, Versions.nip76API1)
+                const seed = hexToBytes(f.seed)
+                var hdkey = HDKey.parseMasterSeed(seed, Versions.nip76API1)
                 var childkey = hdkey.derive(f.path)
 
                 assert.equal(childkey.extendedPrivateKey, f.nip76private)
@@ -446,7 +449,7 @@ describe('hdkey', function () {
     describe('- deriveChildKey', function () {
         fixtures.forEach(function (f) {
             it('- should derive non-hardened children the same with and without the private key', () => {
-                let parentWithPrivateKey = HDKey.parseMasterSeed(Buffer.from(f.seed), Versions.nip76API1);
+                let parentWithPrivateKey = HDKey.parseMasterSeed(hexToBytes(f.seed), Versions.nip76API1);
                 let childWithPrivateKey = parentWithPrivateKey.deriveChildKey(0, false);
                 let parentWithoutPrivateKey = new HDKey({ publicKey: parentWithPrivateKey.publicKey, chainCode: parentWithPrivateKey.chainCode, version: parentWithPrivateKey.version });
                 let childWithoutPrivateKey = parentWithoutPrivateKey.deriveChildKey(0, false);
@@ -459,7 +462,7 @@ describe('hdkey', function () {
     // https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki
     describe('Spec test vectors', () => {
         it('Test Vector 1', () => {
-            const master = HDKey.parseMasterSeed(Buffer.from('000102030405060708090a0b0c0d0e0f', 'hex'), Versions.bitcoinMain);
+            const master = HDKey.parseMasterSeed(hexToBytes('000102030405060708090a0b0c0d0e0f'), Versions.bitcoinMain);
             deepStrictEqual(master.derive('m').toJSON(), {
                 xpriv:
                     'xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi',
@@ -493,9 +496,8 @@ describe('hdkey', function () {
         });
         it('Test Vector 2', () => {
             const master = HDKey.parseMasterSeed(
-                Buffer.from(
-                    'fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a29f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542'
-                    , 'hex'), Versions.bitcoinMain
+                hexToBytes(
+                    'fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a29f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542'), Versions.bitcoinMain
             );
             deepStrictEqual(master.derive('m').toJSON(), {
                 xpriv:
@@ -530,9 +532,8 @@ describe('hdkey', function () {
         });
         it('Test Vector 3', () => {
             const master = HDKey.parseMasterSeed(
-                Buffer.from(
-                    '4b381541583be4423346c643850da4b320e46a87ae3d2a4e6da11eba819cd4acba45d239319ac14f863b8d5ab5a0d0c64d2e8a1e7d1457df2e5a3c51c73235be'
-                    , 'hex')
+                hexToBytes(
+                    '4b381541583be4423346c643850da4b320e46a87ae3d2a4e6da11eba819cd4acba45d239319ac14f863b8d5ab5a0d0c64d2e8a1e7d1457df2e5a3c51c73235be')
                 , Versions.bitcoinMain
             );
             deepStrictEqual(master.derive('m').toJSON(), {
@@ -548,8 +549,7 @@ describe('hdkey', function () {
         });
         it('Test Vector 4', () => {
             const master = HDKey.parseMasterSeed(
-                Buffer.from('3ddd5602285899a946114506157c7997e5444528f3003f6134712147db19b678'
-                    , 'hex'), Versions.bitcoinMain
+                hexToBytes('3ddd5602285899a946114506157c7997e5444528f3003f6134712147db19b678'), Versions.bitcoinMain
             );
             deepStrictEqual(master.derive('m').toJSON(), {
                 xpriv:
@@ -594,34 +594,32 @@ describe('hdkey', function () {
 
     if (0) { // fixture gen helper should not run by default
         fixtures.forEach((f, i) => {
-            const seed = Buffer.from(f.seed, 'hex')
-            var hdkey = HDKey.parseMasterSeed(seed as Buffer, Versions.nip76API1)
+            const seed = utf8ToBytes(f.seed)
+            var hdkey = HDKey.parseMasterSeed(seed, Versions.nip76API1)
             var childkey = hdkey.derive(f.path)
             f.nip76private = childkey.extendedPrivateKey!;
             f.nip76public = childkey.extendedPublicKey;
-
             if (i === 0) {
                 // prefix maker helper
-                var versionPri = '0x' + Buffer.from(base58.decode('n76s' + f.nip76private.substring(4)).slice(0, 4)).toString('hex');
-                var versionPub = '0x' + Buffer.from(base58.decode('n76p' + f.nip76public.substring(4)).slice(0, 4)).toString('hex');
+                var versionPri = '0x' + bytesToHex(base58.decode('n76s' + f.nip76private.substring(4)).slice(0, 4));
+                var versionPub = '0x' + bytesToHex(base58.decode('n76p' + f.nip76public.substring(4)).slice(0, 4));
                 console.log(`\npublic: ${versionPub},\nprivate: ${versionPri}`)
             }
 
-            var hdkey = HDKey.parseMasterSeed(seed as Buffer, Versions.animiqAPI3)
+            var hdkey = HDKey.parseMasterSeed(seed, Versions.animiqAPI3)
             var childkey = hdkey.derive(f.path)
             f.animiqV3private = childkey.extendedPrivateKey!;
             f.animiqV3public = childkey.extendedPublicKey;
 
-            var hdkey = HDKey.parseMasterSeed(seed as Buffer, Versions.animiqAPI2)
+            var hdkey = HDKey.parseMasterSeed(seed, Versions.animiqAPI2)
             var childkey = hdkey.derive(f.path)
             f.animiqV2private = childkey.extendedPrivateKey!;
             f.animiqV2public = childkey.extendedPublicKey;
         })
         var json = JSON.stringify(fixtures, null, '\t')
         console.log(json);
-        fit('should fail if fixture generation is run', () => {
+        it('should fail if fixture generation is run', () => {
             throw new Error('running fixture generation')
         });
     };
 })
-
