@@ -4,7 +4,7 @@ import { base64 } from '@scure/base';
 import * as secp from '@noble/secp256k1';
 import { sha256 as sha256x } from '@noble/hashes/sha256';
 import { HDKey, Versions } from '../keys';
-import { PrivateThread, ThreadKeySet } from '../content';
+import { PrivateChannel, ChannelKeySet } from '../content';
 import { bytesToHex, concatBytes } from '@noble/hashes/utils';
 
 interface WalletCostructorParams {
@@ -32,8 +32,8 @@ export class Wallet {
     private lockword = '';
     private locknums!: Int32Array;
 
-    threads: PrivateThread[] = [];
-    following: PrivateThread[] = [];
+    channels: PrivateChannel[] = [];
+    following: PrivateChannel[] = [];
     isGuest = false;
     isInSession = false;
     requiresLogin = false;
@@ -188,32 +188,32 @@ export class Wallet {
         this.aproot = this.aqroot.derive(`m/${this.locknums[17]}'/${this.locknums[13]}'/${this.locknums[9]}'/${this.locknums[5]}'`);
         // this.pproot = this.aqroot.derive(`m/${this.locknums[18]}'/${this.locknums[14]}'/${this.locknums[10]}'/${this.locknums[6]}'`);
         this.sproot = this.aqroot.derive(`m/${this.locknums[16]}'/${this.locknums[12]}'/${this.locknums[8]}'/${this.locknums[4]}'`);
-        this.threads = [] as PrivateThread[];
-        this.getThread(0);
+        this.channels = [] as PrivateChannel[];
+        this.getChannel(0);
 
     }
 
-    private createThread(keyset: ThreadKeySet): PrivateThread {
-        const thread = new PrivateThread();
-        thread.content = {
+    private createChannel(keyset: ChannelKeySet): PrivateChannel {
+        const channel = new PrivateChannel();
+        channel.content = {
             kind: nostrTools.Kind.ChannelMetadata,
-            name: 'Loading Thread Info ...',
+            name: 'Loading Channel Info ...',
             pubkey: this.ownerPubKey,
             sig: '',
             tags: [],
             last_known_index: 0
         };
-        thread.setOwnerKeys(keyset.ap, keyset.sp);
-        thread.ownerPubKey = this.ownerPubKey;
-        return thread;
+        channel.setOwnerKeys(keyset.ap, keyset.sp);
+        channel.ownerPubKey = this.ownerPubKey;
+        return channel;
     }
 
-    getThread(index: number): PrivateThread {
+    getChannel(index: number): PrivateChannel {
         if (!this.aproot || !this.sproot) {
-            throw new Error('AP Root and SP Root keys needed before getThread().');
+            throw new Error('AP Root and SP Root keys needed before getChannel().');
         }
-        if (!this.threads[index]) {
-            let keyset: ThreadKeySet;
+        if (!this.channels[index]) {
+            let keyset: ChannelKeySet;
             // const ppOffset = ((index + 1) * this.locknums[3]) % HDKey.hardenedKeyOffset;
             const apOffset = ((index + 1) * this.locknums[2]) % HDKey.hardenedKeyOffset;
             const spOffset = ((index + 1) * this.locknums[1]) % HDKey.hardenedKeyOffset;
@@ -221,10 +221,10 @@ export class Wallet {
             const ap = this.aproot.deriveChildKey(apOffset, true);
             const sp = this.sproot.deriveChildKey(spOffset, true);
             keyset = { ap: ap, sp: sp, ver: Versions.nip76API1 };
-            this.threads = [...this.threads, this.createThread(keyset)];
+            this.channels = [...this.channels, this.createChannel(keyset)];
         }
-        this.threads[index].ownerPubKey = this.ownerPubKey;
-        return this.threads[index];
+        this.channels[index].ownerPubKey = this.ownerPubKey;
+        return this.channels[index];
     }
 }
 

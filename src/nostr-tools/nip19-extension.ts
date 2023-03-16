@@ -65,7 +65,7 @@ async function decrypt(data: Uint8Array, key: Uint8Array): Promise<Uint8Array | 
     }
 }
 
-export type PrivateThreadPointer = {
+export type PrivateChannelPointer = {
     ownerPubKey: string;
     addresses: {
         pubkey: Uint8Array,
@@ -88,7 +88,7 @@ const keyFromSharedSecret = (pubkey: Uint8Array, privkey: Uint8Array) => {
     return sharedKey;
 };
 
-export async function nprivateThreadEncode(tp: PrivateThreadPointer, secret: string | Uint8Array[]): Promise<string> {
+export async function nprivateChannelEncode(tp: PrivateChannelPointer, secret: string | Uint8Array[]): Promise<string> {
     let cryptKey: Uint8Array;
     if (typeof (secret) === 'string') {
         cryptKey = keyFromSecretString(secret);
@@ -114,7 +114,7 @@ export async function nprivateThreadEncode(tp: PrivateThreadPointer, secret: str
 
 export async function decode(nip19: string, secret: string | Uint8Array[]): Promise<{
     type: string
-    data: PrivateThreadPointer | string
+    data: PrivateChannelPointer | string
 }> {
     const { prefix, words } = bech32.decode(nip19, Bech32MaxSize);
     if (prefix === 'nprivatethread1') {

@@ -1,23 +1,23 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
 import * as nostrTools from 'nostr-tools';
-import { nprivateThreadEncode, PrivateThreadPointer } from '../../nostr-tools/nip19-extension';
+import { nprivateChannelEncode, PrivateChannelPointer } from '../../nostr-tools/nip19-extension';
 import { Bip32NetworkInfo, HDKey, Versions } from '../keys';
 import { ContentDocument, ContentTemplate } from './ContentDocument';
 import { IndexDocument, IndexPermission } from './IndexDocument';
 import { PostDocument } from './PostDocument';
 
-export interface ThreadKeySet {
+export interface ChannelKeySet {
     ver: Bip32NetworkInfo;
     ap: HDKey;
     sp: HDKey;
 }
 
-export class ThreadIndexMap {
+export class ChannelIndexMap {
     post!: IndexDocument;
     following!: IndexDocument;
 }
 
-export interface IThreadPayload extends ContentTemplate {
+export interface IChannelPayload extends ContentTemplate {
 
     name?: string;
     about?: string;
@@ -25,36 +25,36 @@ export interface IThreadPayload extends ContentTemplate {
     last_known_index: number;
 }
 
-export class PrivateThread extends ContentDocument {
+export class PrivateChannel extends ContentDocument {
 
-    override content!: IThreadPayload;
+    override content!: IChannelPayload;
     override index = 0;
-    indexMap = new ThreadIndexMap();
+    indexMap = new ChannelIndexMap();
     posts = [] as PostDocument[];
-    following = [] as PrivateThread[];
+    following = [] as PrivateChannel[];
 
-    static fromPointer(pointer: PrivateThreadPointer): PrivateThread {
+    static fromPointer(pointer: PrivateChannelPointer): PrivateChannel {
         const ap = new HDKey({ publicKey: pointer.addresses.pubkey, chainCode: pointer.addresses.chain, version: Versions.nip76API1 });
         const sp = new HDKey({ publicKey: pointer.secrets.pubkey, chainCode: pointer.secrets.chain, version: Versions.nip76API1 });
-        const thread = new PrivateThread();
-        thread.ownerPubKey = pointer.ownerPubKey;
-        thread.indexMap = new ThreadIndexMap();
-        thread.indexMap.post = IndexDocument.createIndex(
+        const channel = new PrivateChannel();
+        channel.ownerPubKey = pointer.ownerPubKey;
+        channel.indexMap = new ChannelIndexMap();
+        channel.indexMap.post = IndexDocument.createIndex(
             IndexPermission.CreateByOwner,
             ap,
             sp);
-        thread.setKeys(
-            thread.indexMap.post.ap.deriveChildKey(thread.index),
-            thread.indexMap.post.sp.deriveChildKey(thread.index)
+        channel.setKeys(
+            channel.indexMap.post.ap.deriveChildKey(channel.index),
+            channel.indexMap.post.sp.deriveChildKey(channel.index)
         );
-        thread.content = {
+        channel.content = {
             kind: nostrTools.Kind.ChannelMetadata,
             pubkey: pointer.ownerPubKey,
             sig: '',
             tags: [],
             last_known_index: 0
         };
-        return thread;
+        return channel;
     }
     override get payload(): any[] {
         return [
@@ -79,7 +79,7 @@ export class PrivateThread extends ContentDocument {
         if (!ap.privateKey) {
             throw new Error('ap.privateKey needed to setOwnerKeys.')
         }
-        this.indexMap = new ThreadIndexMap();
+        this.indexMap = new ChannelIndexMap();
         this.indexMap.post = IndexDocument.createIndex(
             IndexPermission.CreateByOwner,
             ap.deriveChildKey(1001, true),
@@ -97,8 +97,8 @@ export class PrivateThread extends ContentDocument {
         )
     }
 
-    async getThreadPointer(secret: string | Uint8Array[] = ''): Promise<string> {
-        return nprivateThreadEncode({
+    async getChannelPointer(secret: string | Uint8Array[] = ''): Promise<string> {
+        return nprivateChannelEncode({
             ownerPubKey: this.ownerPubKey,
             addresses: {
                 pubkey: this.indexMap.post.ap.publicKey,

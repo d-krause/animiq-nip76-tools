@@ -2,7 +2,7 @@
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 import * as nostrTools from 'nostr-tools';
-import { utf8Encoder } from 'nostr-tools/utils';
+// import { utf8Encoder } from 'nostr-tools/utils';
 import { HDKey } from '../keys';
 
 export class ContentDocument {
@@ -31,7 +31,7 @@ export class ContentDocument {
     get hash(): string {
         const payload = this.payload;
         payload[2] = null;
-        const bytes = utf8Encoder.encode(JSON.stringify(payload));
+        const bytes = new TextEncoder().encode(JSON.stringify(payload));
         return bytesToHex(sha256(bytes));
     }
 

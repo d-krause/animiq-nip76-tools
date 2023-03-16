@@ -1,12 +1,8 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
-import { HDKey, HDKissDocumentType } from '../keys';
+import { HDKey } from '../keys';
 import { ContentDocument, ContentTemplate } from './ContentDocument';
 import { IndexDocument, IndexPermission } from './IndexDocument';
-import { PrivateThread } from './PrivateThread';
-import * as nostrTools from 'nostr-tools';
-import { utf8Encoder } from 'nostr-tools/utils';
-import { sha256 } from '@noble/hashes/sha256';
-import { bytesToHex } from '@noble/hashes/utils';
+import { PrivateChannel } from './PrivateThread';
 
 export interface IPostPayload extends ContentTemplate {
     text: string;
@@ -14,7 +10,7 @@ export interface IPostPayload extends ContentTemplate {
 
 export class PostDocument extends ContentDocument {
     override content!: IPostPayload;
-    thread!: PrivateThread;
+    channel!: PrivateChannel;
     rp!: HDKey;
     reactionsIndex!: IndexDocument;
     reactionTracker: { [key: string | symbol]: number } = {};
