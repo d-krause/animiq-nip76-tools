@@ -2,7 +2,6 @@
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 import * as nostrTools from 'nostr-tools';
-// import { utf8Encoder } from 'nostr-tools/utils';
 import { HDKey } from '../keys';
 
 export class ContentDocument {

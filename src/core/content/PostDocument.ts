@@ -2,7 +2,7 @@
 import { HDKey } from '../keys';
 import { ContentDocument, ContentTemplate } from './ContentDocument';
 import { IndexDocument, IndexPermission } from './IndexDocument';
-import { PrivateChannel } from './PrivateThread';
+import { PrivateChannel } from './PrivateChannel';
 
 export interface IPostPayload extends ContentTemplate {
     text: string;
