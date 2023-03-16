@@ -1,11 +1,12 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
-import * as Base58 from 'bs58';
-import { hmacSha512, sha256, hash160 } from '../util';
-import { Versions, Bip32NetworkInfo } from './Versions';
-import * as secp from '@noble/secp256k1';
-import { assertBytes, bytesToHex, concatBytes, createView, hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
 import { hmac } from '@noble/hashes/hmac';
 import { sha512 } from '@noble/hashes/sha512';
+import { bytesToHex, concatBytes, createView, hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
+import { bytes as assertBytes } from '@noble/hashes/_assert';
+import * as secp from '@noble/secp256k1';
+import { base58 } from '@scure/base';
+import { hash160, hmacSha512, sha256 } from '../util';
+import { Bip32NetworkInfo, Versions } from './Versions';
 // tslint:disable: quotemark max-line-length
 const HARDENED_KEY_OFFSET = 0x80000000;
 
@@ -79,7 +80,7 @@ export class HDKey {
     }
     static parseExtendedKey(key: string): HDKey {
         // version_bytes[4] || depth[1] || parent_fingerprint[4] || index[4] || chain_code[32] || key_data[33] || checksum[4]
-        const decoded = Base58.decode(key);
+        const decoded = base58.decode(key);
         if (decoded.length > 112) {
             throw new Error('invalid extended key');
         }
@@ -141,7 +142,7 @@ export class HDKey {
             key,
         );
         const checksum = sha256(sha256(bytes)).slice(0, 4);
-        return Base58.encode(secp.utils.concatBytes(bytes, checksum));
+        return base58.encode(secp.utils.concatBytes(bytes, checksum));
     }
     get privateKey(): Uint8Array {
         return this._privateKey;
@@ -177,7 +178,10 @@ export class HDKey {
         return this.serialize(this._version.bip32.public, this._publicKey);
     }
     get nostrPubKey(): string {
-        return secp.utils.bytesToHex(this._publicKey.slice(1));
+        return bytesToHex(this._publicKey.slice(1));
+    }
+    get hexPrivKey(): string | null {
+        return this._privateKey ? bytesToHex(this._privateKey) : null;
     }
     derive(chain: string): HDKey {
         if (!/^[mM]'?/.test(chain)) {

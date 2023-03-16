@@ -156,7 +156,7 @@ let fixtures = [
     }
 ];
 
-if (0) {
+/* if (0) {
     fit('bip39 ', () => {
         for (var i = 0; i < 1; i++) {
 
@@ -188,7 +188,7 @@ if (0) {
         }
     });
 }
-
+ */
 describe('hdkey', function () {
     describe('+ parseMasterSeed', function () {
         fixtures.forEach(function (f) {
@@ -309,10 +309,10 @@ describe('hdkey', function () {
             badlen.fill(0);
             assert.throws(function () {
                 hdkey.verify(badlen, a)
-            }, /Expected 32 bytes/)
+            }, /Expected Uint8Array of length 32/)
             assert.throws(function () {
                 hdkey.verify(ma, badlen)
-            }, /Expected 64 bytes/)
+            }, /Expected Uint8Array of length 64/)
         })
     })
 

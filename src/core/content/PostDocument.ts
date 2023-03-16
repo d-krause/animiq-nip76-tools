@@ -1,45 +1,46 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
 import { HDKey, HDKissDocumentType } from '../keys';
-import { ContentDocument } from './ContentDocument';
+import { ContentDocument, ContentTemplate } from './ContentDocument';
 import { IndexDocument, IndexPermission } from './IndexDocument';
 import { PrivateThread } from './PrivateThread';
 import * as nostrTools from 'nostr-tools';
+import { utf8Encoder } from 'nostr-tools/utils';
+import { sha256 } from '@noble/hashes/sha256';
+import { bytesToHex } from '@noble/hashes/utils';
+
+export interface IPostPayload extends ContentTemplate {
+    text: string;
+}
 
 export class PostDocument extends ContentDocument {
-    override decryptedContent!: IPostPayload;
-    ownerPubKey!: string;
-    nostrEvent: any;
+    override content!: IPostPayload;
     thread!: PrivateThread;
     rp!: HDKey;
     reactionsIndex!: IndexDocument;
-    reactions!: PostDocument[];
     reactionTracker: { [key: string | symbol]: number } = {};
-    repliesIndex!: IndexDocument;
-    replies!: PostDocument[];
+    reactions: PostDocument[] = [];
+    replies: PostDocument[] = [];
+
 
     override setKeys(ap: HDKey, sp: HDKey) {
+        super.setKeys(ap, sp);
+        this.rp = this.ap.deriveNewMasterKey();
+        this.reactionsIndex = IndexDocument.createIndex(
+            IndexPermission.CreateByPublic,
+            this.rp.deriveChildKey(0),
+            this.rp.deriveChildKey(1)
+        );
+        this.reactions = [];
+    }
 
-        const resetKeys = super.setKeys(ap, sp);
-        if (resetKeys) {
-            this.rp = this.ap.deriveNewMasterKey();
-            this.reactionsIndex = IndexDocument.createIndex(
-                'Reaction',
-                HDKissDocumentType.Reaction,
-                IndexPermission.CreateByPublic,
-                this.rp.deriveChildKey(0),
-                this.rp.deriveChildKey(1)
-            );
-            this.reactions = [];
-            this.repliesIndex = IndexDocument.createIndex(
-                'Post',
-                HDKissDocumentType.Post,
-                IndexPermission.CreateByPublic,
-                this.rp.deriveChildKey(2),
-                this.rp.deriveChildKey(3)
-            );
-            this.replies = [];
-        }
-        return resetKeys;
+    override get payload(): any[] {
+        return [...super.payload, this.content.text];
+    }
+
+    override deserialize(payload: string): any[] {
+        const raw = super.deserialize(payload);
+        this.content.text = raw[4];
+        return raw;
     }
 }
 
@@ -49,17 +50,6 @@ export interface FileInfo {
     type: string;
     lastModified: number;
 }
-
-export interface IPostPayload {
-    attachments?: Attachments;
-    full_picture?: string;
-    link?: string;
-    message?: string;
-    authorPubKey?: string;
-    sig?: string;
-    kind: nostrTools.Kind
-}
-
 export interface Attachments {
     data?: AttachmentsDatum[];
 }

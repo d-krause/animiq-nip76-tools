@@ -81,37 +81,6 @@ export class HDKissAddress {
         }
     }
 
-    async encrypt(data: string, key: Uint8Array, version: number): Promise<string> {
-        const iv2 = sha256.create().update(this.publicKey).digest().slice(0, 16);
-        const secretBytes = key.slice(0, 32);
-        const alg = { name: 'AES-GCM', iv: iv2, length: 256 } as AesKeyAlgorithm;
-        const secretKey = await window.crypto.subtle.importKey('raw', secretBytes, alg, false, ['encrypt']);
-        const encrypted = new Uint8Array(await window.crypto.subtle.encrypt(alg, secretKey, new TextEncoder().encode(data)));
-        const tempCrap = secp.utils.concatBytes(encrypted.slice(16), encrypted.slice(0, 16));
-        const stored = base64.encode(tempCrap);
-        return stored;
-    }
-
-    async decrypt(data: string, key: Uint8Array, version: number): Promise<string> {
-        try {
-            const encrypted = base64.decode(data);
-            const bdata = secp.utils.concatBytes(encrypted.slice(16), encrypted.slice(0, 16));
-            const iv = sha256.create().update(this.publicKey).digest().slice(0, 16);
-            const secret = key.slice(0, 32);
-            const alg = { name: 'AES-GCM', iv: iv, length: 256 } as AesKeyAlgorithm;
-            const secretKey = await window.crypto.subtle.importKey('raw', secret, alg, false, ['decrypt']);
-            const decrypted = new Uint8Array(await window.crypto.subtle.decrypt(alg, secretKey, bdata));
-            if (decrypted[0] == 123 && decrypted[decrypted.length - 1] == 125) {
-                return new TextDecoder().decode(decrypted);
-            } else {
-                return `{ "imageUrl": "${window.URL.createObjectURL(new Blob([decrypted], { type: 'image/png' }))}" }`
-            }
-        } catch (e) {
-            console.log('Address.decrypt error' + e);
-            return null as any as string;
-        }
-    }
-
     get publicKey(): Uint8Array {
         return this._publicKey;
     }

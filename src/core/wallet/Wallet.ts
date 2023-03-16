@@ -1,4 +1,5 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
+import * as nostrTools from 'nostr-tools';
 import { base64 } from '@scure/base';
 import * as secp from '@noble/secp256k1';
 import { sha256 as sha256x } from '@noble/hashes/sha256';
@@ -24,7 +25,7 @@ export class Wallet {
     private master!: HDKey;
     nip76root!: HDKey;
     private aqroot!: HDKey;
-    private pproot!: HDKey;
+    // private pproot!: HDKey;
     private aproot!: HDKey;
     private sproot!: HDKey;
     private password = '';
@@ -113,8 +114,8 @@ export class Wallet {
     }
 
     async saveKey(secret: string, saveType: 'backup' | 'session'): Promise<boolean> {
-        if (!this.master || !this.pproot || !this.locknums) {
-            throw new Error('Master private, PP Root public, and Lock Numbers key needed before save().');
+        if (!this.master || !this.locknums) {
+            throw new Error('Master private and Lock Numbers key needed before save().');
         }
         const keyBuffer = secp.utils.concatBytes(this.master.chainCode, this.master.privateKey);
         const cryptoBuffer = saveType === 'session'
@@ -185,7 +186,7 @@ export class Wallet {
         if (!numsOnly) { this.locknums = this.nip76root.createIndexesFromWord(this.lockword); }
         this.aqroot = this.nip76root.derive(`m/${this.locknums[19]}'/${this.locknums[15]}'/${this.locknums[11]}'/${this.locknums[7]}'`);
         this.aproot = this.aqroot.derive(`m/${this.locknums[17]}'/${this.locknums[13]}'/${this.locknums[9]}'/${this.locknums[5]}'`);
-        this.pproot = this.aqroot.derive(`m/${this.locknums[18]}'/${this.locknums[14]}'/${this.locknums[10]}'/${this.locknums[6]}'`);
+        // this.pproot = this.aqroot.derive(`m/${this.locknums[18]}'/${this.locknums[14]}'/${this.locknums[10]}'/${this.locknums[6]}'`);
         this.sproot = this.aqroot.derive(`m/${this.locknums[16]}'/${this.locknums[12]}'/${this.locknums[8]}'/${this.locknums[4]}'`);
         this.threads = [] as PrivateThread[];
         this.getThread(0);
@@ -194,30 +195,32 @@ export class Wallet {
 
     private createThread(keyset: ThreadKeySet): PrivateThread {
         const thread = new PrivateThread();
-        thread.v = 3;
-        thread.decryptedContent = {
+        thread.content = {
+            kind: nostrTools.Kind.ChannelMetadata,
             name: 'Loading Thread Info ...',
+            pubkey: this.ownerPubKey,
+            sig: '',
+            tags: [],
             last_known_index: 0
         };
-        thread.pp = keyset.pp;
-        thread.setKeys(keyset.ap, keyset.sp);
+        thread.setOwnerKeys(keyset.ap, keyset.sp);
         thread.ownerPubKey = this.ownerPubKey;
         return thread;
     }
 
     getThread(index: number): PrivateThread {
-        if (!this.pproot || !this.aproot || !this.sproot) {
-            throw new Error('PP Root public, AP Root, and SP Root keys needed before getThread().');
+        if (!this.aproot || !this.sproot) {
+            throw new Error('AP Root and SP Root keys needed before getThread().');
         }
         if (!this.threads[index]) {
             let keyset: ThreadKeySet;
-            const ppOffset = ((index + 1) * this.locknums[3]) % HDKey.hardenedKeyOffset;
+            // const ppOffset = ((index + 1) * this.locknums[3]) % HDKey.hardenedKeyOffset;
             const apOffset = ((index + 1) * this.locknums[2]) % HDKey.hardenedKeyOffset;
             const spOffset = ((index + 1) * this.locknums[1]) % HDKey.hardenedKeyOffset;
-            const pp = this.pproot.deriveChildKey(ppOffset, true);
+            // const pp = this.pproot.deriveChildKey(ppOffset, true);
             const ap = this.aproot.deriveChildKey(apOffset, true);
             const sp = this.sproot.deriveChildKey(spOffset, true);
-            keyset = { pp: pp, ap: ap, sp: sp, ver: Versions.nip76API1 };
+            keyset = { ap: ap, sp: sp, ver: Versions.nip76API1 };
             this.threads = [...this.threads, this.createThread(keyset)];
         }
         this.threads[index].ownerPubKey = this.ownerPubKey;

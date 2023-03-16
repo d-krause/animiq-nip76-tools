@@ -61,12 +61,13 @@ const config = {
   resolve: {
     extensions: [".tsx", ".ts", ".jsx", ".js", "..."],
     fallback: {
+      // zlib: require.resolve('browserify-zlib'),
       // buffer: require.resolve('buffer'),
       // stream: require.resolve('stream-browserify'),
       // crypto: require.resolve('crypto-browserify'),
     },
     alias: {
-      // 'bn.js': path.join(__dirname, 'node_modules/bn.js/lib/bn.js'),
+      '@noble/hashes': path.join(__dirname, 'node_modules/@noble/hashes'),
     }
   }
 };
