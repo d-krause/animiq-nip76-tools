@@ -1,13 +1,14 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
 import { hmac } from '@noble/hashes/hmac';
+import { ripemd160 } from '@noble/hashes/ripemd160';
+import { sha256 } from '@noble/hashes/sha256';
 import { sha512 } from '@noble/hashes/sha512';
 import { bytesToHex, concatBytes, createView, hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
 import { bytes as assertBytes } from '@noble/hashes/_assert';
 import * as secp from '@noble/secp256k1';
 import { base58 } from '@scure/base';
-import { hash160, hmacSha512, sha256 } from '../util';
 import { Bip32NetworkInfo, Versions } from './Versions';
-// tslint:disable: quotemark max-line-length
+
 const HARDENED_KEY_OFFSET = 0x80000000;
 
 function bytesToNumber(bytes: Uint8Array): bigint {
@@ -17,7 +18,9 @@ function bytesToNumber(bytes: Uint8Array): bigint {
 function numberToBytes(num: bigint): Uint8Array {
     return hexToBytes(num.toString(16).padStart(64, '0'));
 }
+
 const fromU32 = (data: Uint8Array) => createView(data).getUint32(0, false);
+
 const toU32 = (n: number) => {
     if (!Number.isSafeInteger(n) || n < 0 || n > 2 ** 32 - 1) {
         throw new Error(`Invalid number=${n}. Should be from 0 to 2 ** 32 - 1`);
@@ -69,11 +72,11 @@ export class HDKey {
                 throw new Error('HDKey: zero depth with non-zero index/parent fingerprint');
             }
         }
-        this._keyIdentifier = hash160(this._publicKey);
+        this._keyIdentifier = ripemd160(sha256(this._publicKey));
         this._version = params.version || Versions.bitcoinMain;
     }
     static parseMasterSeed(seed: Uint8Array, version: Bip32NetworkInfo): HDKey {
-        const i = hmacSha512(utf8ToBytes('Bitcoin seed'), seed);
+        const i = hmac.create(sha512, new Uint8Array(utf8ToBytes('Bitcoin seed'))).update(seed).digest();
         const iL = i.slice(0, 32);
         const iR = i.slice(32);
         return new HDKey({ privateKey: iL, chainCode: iR, version: version });
@@ -183,6 +186,9 @@ export class HDKey {
     get hexPrivKey(): string | null {
         return this._privateKey ? bytesToHex(this._privateKey) : null;
     }
+    get hexChainCode(): string {
+        return bytesToHex(this._chainCode);
+    }
     derive(chain: string): HDKey {
         if (!/^[mM]'?/.test(chain)) {
             throw new Error('Path must start with "m" or "M"');
@@ -206,6 +212,7 @@ export class HDKey {
         });
         return childKey;
     }
+    // path = 'm'
     public deriveChildKey(index: number, hardened = false): HDKey {
         if (!this.publicKey || !this.chainCode) {
             throw new Error('No publicKey or chainCode set');
@@ -296,27 +303,5 @@ export class HDKey {
             xpriv: this.extendedPrivateKey!,
             xpub: this.extendedPublicKey,
         };
-    }
-    createIndexesFromWord(word: string, length = 16): Int32Array {
-        const hash = sha256(new TextEncoder().encode(word));
-        const hash0 = createView(hash);
-        const hash1 = createView(hmacSha512(this.privateKey, hash));
-        const hash2 = createView(hmacSha512(this.chainCode, hash));
-        const r2 = new Int32Array(20);
-        for (let i = 0; i < length; i++) {
-            const value = i < 8 ? Math.abs(hash1.getInt32(i * 8)) : Math.abs(hash2.getInt32((i - 8) * 8));
-            r2[i] = value;
-        }
-        r2[16] = Math.abs(hash0.getInt32(0));
-        r2[17] = Math.abs(hash0.getInt32(8));
-        r2[18] = Math.abs(hash0.getInt32(16));
-        r2[19] = Math.abs(hash0.getInt32(24));
-        return r2;
-    }
-    deriveNewMasterKey(): HDKey {
-        const i = hmacSha512(this.publicKey, this.chainCode);
-        const iL = i.slice(0, 32);
-        const iR = i.slice(32);
-        return new HDKey({ privateKey: iL, chainCode: iR, version: this.version });
     }
 }

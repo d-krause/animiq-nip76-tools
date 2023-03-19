@@ -20,13 +20,14 @@ export class IndexDocument {
         return rtn;
     }
 
-    private getKeyInfo(doc: ContentDocument): { ap: HDKey, sp: HDKey } {
-        const [ap, sp] = [
-            this.ap.deriveChildKey(doc.index),
-            this.sp.deriveChildKey(doc.index),
-        ];
-        doc.setKeys(ap, sp);
-        return { ap, sp };
+    private setDocKeys(doc: ContentDocument): void {
+        if (!doc.ap || !doc.sp) {
+            const [ap, sp] = [
+                this.ap.deriveChildKey(doc.index),
+                this.sp.deriveChildKey(doc.index),
+            ];
+            doc.setKeys(ap, sp);
+        }
     }
 
     async encrypt(doc: ContentDocument, signingKey: string, created_at?: number, tags?: string[][]): Promise<NostrEventDocument> {
@@ -34,20 +35,20 @@ export class IndexDocument {
         created_at = created_at || Math.floor(Date.now() / 1000);
         doc.content.sig = bytesToHex(signSync(doc.hash, signingKey));
 
-        const info = this.getKeyInfo(doc);
+        this.setDocKeys(doc);
         const iv = randomBytes(16);
         const content = new TextEncoder().encode(doc.serialize());
         const alg = { name: 'AES-GCM', iv, length: 256 } as AesKeyAlgorithm;
-        const secretKey = await globalThis.crypto.subtle.importKey('raw', info.sp.publicKey.slice(1), alg, false, ['encrypt']);
+        const secretKey = await globalThis.crypto.subtle.importKey('raw', doc.sp.publicKey.slice(1), alg, false, ['encrypt']);
         const encrypted = new Uint8Array(await globalThis.crypto.subtle.encrypt(alg, secretKey, content));
 
         const event = nostrTools.getBlankEvent() as NostrEventDocument;
         event.tags = tags || [];
         event.created_at = created_at;
         event.kind = 17761;
-        event.pubkey = info.ap.nostrPubKey;
+        event.pubkey = doc.ap.nostrPubKey;
         event.content = base64.encode(concatBytes(iv, encrypted));
-        event.sig = nostrTools.signEvent(event, info.ap.hexPrivKey!) as any;
+        event.sig = nostrTools.signEvent(event, doc.ap.hexPrivKey!) as any;
         event.id = nostrTools.getEventHash(event);
 
         return event;
@@ -58,27 +59,17 @@ export class IndexDocument {
             doc.nostrEvent = event as NostrEventDocument;
             doc.ready = true;
 
-            const info = this.getKeyInfo(doc);
-            [info.ap, info.sp] = [doc.ap, doc.sp];
+            this.setDocKeys(doc);
 
             const encrypted = base64.decode(event.content);
             const iv = encrypted.slice(0, 16);
             const data = encrypted.slice(16);
             const alg = { name: 'AES-GCM', iv, length: 256 } as AesKeyAlgorithm;
-            const secretKey = await globalThis.crypto.subtle.importKey('raw', info.sp.publicKey.slice(1), alg, false, ['decrypt']);
+            const secretKey = await globalThis.crypto.subtle.importKey('raw', doc.sp.publicKey.slice(1), alg, false, ['decrypt']);
             const decrypted = new Uint8Array(await globalThis.crypto.subtle.decrypt(alg, secretKey, data));
             const json = new TextDecoder().decode(decrypted);
             doc.deserialize(json);
-            // import { compress } from 'compress-json';
-            // const compA = JSON.stringify(compress(JSON.parse(json)));
-            // const compB = JSON.stringify(compress(doc.decryptedContent));
-            const debug = {
-                curLen: json.length,
-                cur: json,
-                conLen: event.content.length,
-                con: event.content
-            }
-            console.log('IndexDocument.decrypt', debug);
+
             return doc.ready;
         } catch (e) {
             console.log('Address.decrypt error' + e);

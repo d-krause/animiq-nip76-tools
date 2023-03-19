@@ -1,11 +1,10 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
-import { hash160 } from '../util';
+import { ripemd160 } from '@noble/hashes/ripemd160';
 import { sha256 } from '@noble/hashes/sha256';
-import { Bip32NetworkInfo, Versions } from './Versions';
-import { HDKissDocumentType } from './HDKissDocumentType';
-import * as secp from '@noble/secp256k1';
-import { base64, bytesToString, utf8 } from '@scure/base'
 import { concatBytes, createView } from '@noble/hashes/utils';
+import { bytesToString } from '@scure/base';
+import { HDKissDocumentType } from './HDKissDocumentType';
+import { Bip32NetworkInfo, Versions } from './Versions';
 
 export interface HDKissAddressConstructorParams {
     publicKey: Uint8Array;
@@ -87,7 +86,7 @@ export class HDKissAddress {
 
     get rawAddress(): Uint8Array {
         if (!this._rawAddress) {
-            const hash = hash160(this._publicKey);
+            const hash = ripemd160(sha256((this._publicKey)));
             const prefixedHash = new Uint8Array(1);
             const phv = createView(prefixedHash);
             phv.setUint8(0,this._version.networkId);

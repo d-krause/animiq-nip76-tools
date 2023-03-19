@@ -1,10 +1,10 @@
-import * as nodeCrypto from 'crypto';
-import { bytesToHex, hexToBytes, toBytes, utf8ToBytes } from '@noble/hashes/utils';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
 import * as secp from '@noble/secp256k1';
 import { base58 } from '@scure/base';
 import assert, { deepStrictEqual, throws } from 'assert';
+import * as nodeCrypto from 'crypto';
 import { HDKey, Versions } from '../src';
-import { hmacSha512 } from '../src/core/util';
+
 // from https://github.com/cryptocoinjs/hdkey/blob/42637e381bdef0c8f785b14f5b66a80dad969514/test/fixtures/hdkey.json, adding some new network type versions
 let fixtures = [
     {

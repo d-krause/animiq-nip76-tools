@@ -23,6 +23,8 @@ export interface IChannelPayload extends ContentTemplate {
     about?: string;
     picture?: string;
     last_known_index: number;
+    chain_code_ap?: string;
+    chain_code_sp?: string;
 }
 
 export class PrivateChannel extends ContentDocument {
@@ -44,25 +46,27 @@ export class PrivateChannel extends ContentDocument {
             ap,
             sp);
         channel.setKeys(
-            channel.indexMap.post.ap.deriveChildKey(channel.index),
-            channel.indexMap.post.sp.deriveChildKey(channel.index)
+            channel.indexMap.post.ap,
+            channel.indexMap.post.sp
         );
         channel.content = {
             kind: nostrTools.Kind.ChannelMetadata,
             pubkey: pointer.ownerPubKey,
-            sig: '',
-            tags: [],
             last_known_index: 0
         };
         return channel;
     }
     override get payload(): any[] {
+        this.content.chain_code_ap = this.ap.hexChainCode;
+        this.content.chain_code_sp = this.sp.hexChainCode;
         return [
             ...super.payload, 
             this.content.name,
             this.content.about,
             this.content.picture,
             this.content.last_known_index,
+            this.content.chain_code_ap,
+            this.content.chain_code_sp,
         ];
     }
 
@@ -72,6 +76,8 @@ export class PrivateChannel extends ContentDocument {
         this.content.about = raw[5];
         this.content.picture = raw[6];
         this.content.last_known_index = raw[7];
+        this.content.chain_code_ap = raw[8];
+        this.content.chain_code_sp = raw[9];   
         return raw;
     }
 
@@ -92,8 +98,8 @@ export class PrivateChannel extends ContentDocument {
         );
 
         super.setKeys(
-            this.indexMap.post.ap.deriveChildKey(this.index),
-            this.indexMap.post.sp.deriveChildKey(this.index)
+            this.indexMap.post.ap,
+            this.indexMap.post.sp
         )
     }
 
@@ -126,7 +132,7 @@ export class PrivateChannel extends ContentDocument {
             post.ownerPubKey = this.ownerPubKey;
             this.posts.push(post);
             postPubKeys.push(post.ap.nostrPubKey);
-            replyTags.push(post.rp.nostrPubKey);
+            // replyTags.push(post.rp.nostrPubKey);
         }
         filters.push({
             authors: postPubKeys,
