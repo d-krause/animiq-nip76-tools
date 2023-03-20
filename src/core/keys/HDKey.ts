@@ -9,7 +9,7 @@ import * as secp from '@noble/secp256k1';
 import { base58 } from '@scure/base';
 import { Bip32NetworkInfo, Versions } from './Versions';
 
-const HARDENED_KEY_OFFSET = 0x80000000;
+export const HARDENED_KEY_OFFSET = 0x80000000;
 
 function bytesToNumber(bytes: Uint8Array): bigint {
     return BigInt(`0x${bytesToHex(bytes)}`);
@@ -182,6 +182,9 @@ export class HDKey {
     }
     get nostrPubKey(): string {
         return bytesToHex(this._publicKey.slice(1));
+    }
+    get pubKeyHash(): string {
+        return bytesToHex(sha256(this._publicKey.slice(1)));
     }
     get hexPrivKey(): string | null {
         return this._privateKey ? bytesToHex(this._privateKey) : null;

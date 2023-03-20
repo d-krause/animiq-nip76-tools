@@ -2,22 +2,29 @@
 import { sha512 } from '@noble/hashes/sha512';
 import { hexToBytes } from '@noble/hashes/utils';
 import * as nostrTools from 'nostr-tools';
-import { PrivateChannel } from '../content';
+import { IndexDocument, IndexPermission, PrivateChannel } from '../content';
 import { HDKey, Versions } from '../keys';
+import { getIndexReducer, getReducedKey, getReducedKeySet, KeySetCommon } from '../util';
 import { IWalletStorage, WalletConstructorArgs } from './interfaces';
 
 export class Wallet {
-    
+
     private master: HDKey;
+    private nip76Root!: HDKey;
     private lockwords!: Int32Array;
-    
+
     store: IWalletStorage;
     isGuest = false;
     isInSession = false;
 
     ownerPubKey!: string;
+    signingKey!: HDKey;
+    beaconKey!: HDKey;
+    // beacons: string[] = [];
     channels: PrivateChannel[] = [];
     following: PrivateChannel[] = [];
+    followingIndex!: IndexDocument;
+
 
     constructor(args: WalletConstructorArgs) {
         this.ownerPubKey = args.publicKey;
@@ -33,7 +40,27 @@ export class Wallet {
                 this.store.save({ publicKey: this.ownerPubKey, key: this.master, lockwords: this.lockwords });
                 this.isInSession = true;
             }
+            this.nip76Root = this.master.derive(`m/44'/1237'/0'/1776'`);
+            this.signingKey = getReducedKey({
+                root: this.nip76Root,
+                wordset: this.lockwords,
+                offset: KeySetCommon.offsets[1]
+            });
+            const followingKeyset = getReducedKeySet({
+                root: this.nip76Root,
+                wordset: this.lockwords,
+                sort: KeySetCommon.sort.desc,
+                offset: 20
+            });
+            this.followingIndex = IndexDocument.createIndex(IndexPermission.CreateByOwner, followingKeyset.ap, followingKeyset.sp);
+            this.beaconKey = getReducedKey({
+                root: this.nip76Root,
+                wordset: this.lockwords,
+                sort: KeySetCommon.sort.asc,
+                offset: 10
+            });
             this.getChannel(0);
+            // this.beacons = Array(10).map((_, i) => this.beaconKey.deriveChildKey(i, true).nostrPubKey);
         }
     }
 
@@ -92,14 +119,10 @@ export class Wallet {
     }
 
     getChannel(index: number): PrivateChannel {
-        if (!this.lockwords || !this.master) {
+        if (!this.lockwords || !this.master || !this.nip76Root) {
             throw new Error('locknums and master needed before getChannel().');
         }
         if (!this.channels[index]) {
-            const reducer = (hdk: HDKey, num: number) => hdk.deriveChildKey((num * (index + 1)) % HDKey.hardenedKeyOffset, true);
-            const parent = this.lockwords.slice(0, 4).reduce(reducer, this.master.derive(`m/44'/1237'/0'/1776'`));
-            const ap = this.lockwords.slice(4, 8).reduce(reducer, parent);
-            const sp = this.lockwords.slice(8, 12).reduce(reducer, parent);
             const channel = new PrivateChannel();
             channel.ownerPubKey = this.ownerPubKey;
             channel.content = {
@@ -108,8 +131,14 @@ export class Wallet {
                 pubkey: this.ownerPubKey,
                 last_known_index: 0
             };
-            channel.setOwnerKeys(ap, sp);
-            sp.wipePrivateData();
+            const keyset = getReducedKeySet({
+                root: this.nip76Root,
+                wordset: this.lockwords.reverse(),
+                offset: KeySetCommon.offsets[2] + index,
+                right: true,
+            });
+            channel.setOwnerKeys(keyset.ap, keyset.sp);
+            keyset.sp.wipePrivateData();
             this.channels = [...this.channels, channel];
         }
         return this.channels[index];

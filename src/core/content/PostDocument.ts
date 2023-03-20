@@ -11,23 +11,9 @@ export interface IPostPayload extends ContentTemplate {
 export class PostDocument extends ContentDocument {
     override content!: IPostPayload;
     channel!: PrivateChannel;
-    // rp!: HDKey;
-    // reactionsIndex!: IndexDocument;
     reactionTracker: { [key: string | symbol]: number } = {};
     reactions: PostDocument[] = [];
     replies: PostDocument[] = [];
-
-
-    // override setKeys(ap: HDKey, sp: HDKey) {
-    //     super.setKeys(ap, sp);
-    //     this.rp = this.ap.deriveNewMasterKey();
-    //     this.reactionsIndex = IndexDocument.createIndex(
-    //         IndexPermission.CreateByPublic,
-    //         this.rp.deriveChildKey(0),
-    //         this.rp.deriveChildKey(1)
-    //     );
-    //     this.reactions = [];
-    // }
 
     override get payload(): any[] {
         return [...super.payload, this.content.text];

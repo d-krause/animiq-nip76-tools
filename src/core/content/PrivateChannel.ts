@@ -28,9 +28,10 @@ export interface IChannelPayload extends ContentTemplate {
 }
 
 export class PrivateChannel extends ContentDocument {
-
+    
     override content!: IChannelPayload;
     override index = 0;
+    beacon!: string;
     indexMap = new ChannelIndexMap();
     posts = [] as PostDocument[];
     following = [] as PrivateChannel[];
@@ -49,6 +50,7 @@ export class PrivateChannel extends ContentDocument {
             channel.indexMap.post.ap,
             channel.indexMap.post.sp
         );
+        channel.beacon = channel.ap.deriveChildKey(0).pubKeyHash;
         channel.content = {
             kind: nostrTools.Kind.ChannelMetadata,
             pubkey: pointer.ownerPubKey,
@@ -101,6 +103,7 @@ export class PrivateChannel extends ContentDocument {
             this.indexMap.post.ap,
             this.indexMap.post.sp
         )
+        this.beacon = this.ap.deriveChildKey(0).pubKeyHash;
     }
 
     async getChannelPointer(secret: string | Uint8Array[] = ''): Promise<string> {
@@ -122,26 +125,26 @@ export class PrivateChannel extends ContentDocument {
         const postPubKeys: string[] = [];
         const replyTags: string[] = [];
         postPubKeys.push(this.ap.nostrPubKey);
-        if (startIndex === 0) startIndex = 1;
-        for (let i = startIndex + length; i >= startIndex; i--) {
-            const ap = this.indexMap.post.ap.deriveChildKey(i);
-            const sp = this.indexMap.post.sp.deriveChildKey(i);
-            const post = new PostDocument();
-            post.setKeys(ap, sp);
-            post.index = i;
-            post.ownerPubKey = this.ownerPubKey;
-            this.posts.push(post);
-            postPubKeys.push(post.ap.nostrPubKey);
-            // replyTags.push(post.rp.nostrPubKey);
-        }
-        filters.push({
-            authors: postPubKeys,
-            kinds: [17761],
-            limit: length
-        });
+        // if (startIndex === 0) startIndex = 1;
+        // for (let i = startIndex + length; i >= startIndex; i--) {
+        //     const ap = this.indexMap.post.ap.deriveChildKey(i);
+        //     const sp = this.indexMap.post.sp.deriveChildKey(i);
+        //     const post = new PostDocument();
+        //     post.setKeys(ap, sp);
+        //     post.index = i;
+        //     post.ownerPubKey = this.ownerPubKey;
+        //     this.posts.push(post);
+        //     postPubKeys.push(post.ap.nostrPubKey);
+        //     // replyTags.push(post.rp.nostrPubKey);
+        // }
+        // filters.push({
+        //     authors: postPubKeys,
+        //     kinds: [17761],
+        //     limit: length
+        // });
 
         filters.push({
-            '#e': replyTags,
+            '#e': [this.beacon],
             kinds: [17761],
             limit: length
         });

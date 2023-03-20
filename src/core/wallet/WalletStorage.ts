@@ -114,13 +114,13 @@ export class WebWalletStorage implements IWalletStorage {
     createSession() {
         const sessionKey = bytesToHex(window.crypto.getRandomValues(new Uint8Array(32)));
         const expires = (new Date(Date.now() + WebWalletStorage.sessionExpireMinutes * 60000)).toUTCString();
-        document.cookie = `${WebWalletStorage.sessionIdName}=${sessionKey};  Secure; SameSite=Strict; expires=${expires}; path=/;`
+        document.cookie = `${WebWalletStorage.sessionIdName}=${sessionKey}; Secure; SameSite=Strict; expires=${expires}; path=/;`
         return sessionKey;
     }
 
     clearSession() {
         window.sessionStorage.removeItem(WebWalletStorage.sessionKey);
-        document.cookie = `${WebWalletStorage.sessionIdName}=1; expires=0; path=/;`
+        document.cookie = `${WebWalletStorage.sessionIdName}=1; Secure; SameSite=Strict; expires=0; path=/;`
     }
 }
 
