@@ -67,14 +67,8 @@ async function decrypt(data: Uint8Array, key: Uint8Array): Promise<Uint8Array | 
 
 export type PrivateChannelPointer = {
     ownerPubKey: string;
-    addresses: {
-        pubkey: Uint8Array,
-        chain: Uint8Array
-    },
-    secrets: {
-        pubkey: Uint8Array,
-        chain: Uint8Array
-    }
+    signingKey: Uint8Array;
+    cryptoKey: Uint8Array;
     relays?: string[]
 }
 
@@ -101,15 +95,13 @@ export async function nprivateChannelEncode(tp: PrivateChannelPointer, secret: s
     })
     const data = secp256k1.utils.concatBytes(
         ownerPubKey,
-        tp.addresses.pubkey,
-        tp.addresses.chain,
-        tp.secrets.pubkey,
-        tp.secrets.chain,
+        tp.signingKey,
+        tp.cryptoKey,
         relayData
     );
     const encrypted = await encrypt(data, cryptKey);
     const words = bech32.toWords(encrypted);
-    return bech32.encode('nprivatethread1', words, Bech32MaxSize)
+    return bech32.encode('nprivatechan', words, Bech32MaxSize)
 }
 
 export async function decode(nip19: string, secret: string | Uint8Array[]): Promise<{
@@ -117,7 +109,7 @@ export async function decode(nip19: string, secret: string | Uint8Array[]): Prom
     data: PrivateChannelPointer | string
 }> {
     const { prefix, words } = bech32.decode(nip19, Bech32MaxSize);
-    if (prefix === 'nprivatethread1') {
+    if (prefix === 'nprivatechan') {
         let cryptKey: Uint8Array;
         if (typeof (secret) === 'string') {
             cryptKey = keyFromSecretString(secret);
@@ -126,20 +118,14 @@ export async function decode(nip19: string, secret: string | Uint8Array[]): Prom
         }
         let encrypted = Uint8Array.from(bech32.fromWords(words));
         let data = await decrypt(encrypted, cryptKey);
-        if (!data) throw new Error('invalid decryption for nprivatethread1');
-        let tlv = parseTLV(data.slice(162));
+        if (!data) throw new Error('invalid decryption for nprivatechan');
+        let tlv = parseTLV(data.slice(98));
         return {
-            type: 'nprivatethread1',
+            type: 'nprivatechan',
             data: {
                 ownerPubKey: secp256k1.utils.bytesToHex(data.slice(0, 32)),
-                addresses: {
-                    pubkey: data.slice(32, 65),
-                    chain: data.slice(65, 97),
-                },
-                secrets: {
-                    pubkey: data.slice(97, 130),
-                    chain: data.slice(130, 162),
-                },
+                signingKey: data.slice(32, 65),
+                cryptoKey: data.slice(65, 98),
                 relays: (tlv[0] || []).map(d => new TextDecoder().decode(d))
             }
         }

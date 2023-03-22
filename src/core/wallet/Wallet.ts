@@ -2,9 +2,9 @@
 import { sha512 } from '@noble/hashes/sha512';
 import { hexToBytes } from '@noble/hashes/utils';
 import * as nostrTools from 'nostr-tools';
-import { IndexDocument, IndexPermission, PrivateChannel } from '../content';
-import { HDKey, Versions } from '../keys';
-import { getIndexReducer, getReducedKey, getReducedKeySet, KeySetCommon } from '../util';
+import { PrivateChannel } from '../content';
+import { HDKey, HDKIndex, HDKIndexType, Versions } from '../keys';
+import { getReducedKey, getReducedKeySet, KeySetCommon } from '../util';
 import { IWalletStorage, WalletConstructorArgs } from './interfaces';
 
 export class Wallet {
@@ -19,11 +19,9 @@ export class Wallet {
 
     ownerPubKey!: string;
     signingKey!: HDKey;
-    beaconKey!: HDKey;
-    // beacons: string[] = [];
+    documentsIndex!: HDKIndex;
     channels: PrivateChannel[] = [];
     following: PrivateChannel[] = [];
-    followingIndex!: IndexDocument;
 
 
     constructor(args: WalletConstructorArgs) {
@@ -52,13 +50,8 @@ export class Wallet {
                 sort: KeySetCommon.sort.desc,
                 offset: 20
             });
-            this.followingIndex = IndexDocument.createIndex(IndexPermission.CreateByOwner, followingKeyset.ap, followingKeyset.sp);
-            this.beaconKey = getReducedKey({
-                root: this.nip76Root,
-                wordset: this.lockwords,
-                sort: KeySetCommon.sort.asc,
-                offset: 10
-            });
+            // this.followingIndex = IndexDocument.createIndex(IndexPermission.CreateByOwner, followingKeyset.ap, followingKeyset.sp);
+            this.documentsIndex = new HDKIndex(HDKIndexType.Private | HDKIndexType.TimeBased, followingKeyset.ap, followingKeyset.sp);
             this.getChannel(0);
             // this.beacons = Array(10).map((_, i) => this.beaconKey.deriveChildKey(i, true).nostrPubKey);
         }
@@ -137,7 +130,7 @@ export class Wallet {
                 offset: KeySetCommon.offsets[2] + index,
                 right: true,
             });
-            channel.setOwnerKeys(keyset.ap, keyset.sp);
+            channel.hdkIndex = new HDKIndex(HDKIndexType.TimeBased, keyset.ap, keyset.sp);
             keyset.sp.wipePrivateData();
             this.channels = [...this.channels, channel];
         }

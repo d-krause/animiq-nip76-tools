@@ -4,19 +4,30 @@ import { bytesToHex } from '@noble/hashes/utils';
 import * as nostrTools from 'nostr-tools';
 import { HDKey } from '../keys';
 
+
+export interface ContentTemplate {
+    kind: nostrTools.Kind | number;
+    pubkey: string;
+    sig?: string;
+    tags?: string[][];
+}
+
+export interface NostrEventDocument extends nostrTools.Event {
+    contentCut: boolean;
+    tagsCut: boolean;
+
+    replyEventId?: string;
+    rootEventId?: string;
+    parentEventId?: string;
+}
+
 export class ContentDocument {
-    parent!: ContentDocument;
-    index!: number;
-    ap!: HDKey;
-    sp!: HDKey;
-
-    nostrEvent!: NostrEventDocument;
-    ownerPubKey!: string;
-
+    isTopLevel = false;
     ready = false;
     editing = false;
-
     content!: ContentTemplate;
+    nostrEvent!: NostrEventDocument;
+    ownerPubKey!: string;
 
     get payload(): any[] {
         return [
@@ -48,28 +59,6 @@ export class ContentDocument {
         };
         return raw;
     }
-
-    setKeys(ap: HDKey, sp: HDKey): void {
-        this.ap = ap;
-        this.sp = sp;
-    }
-}
-
-
-export interface ContentTemplate {
-    kind: nostrTools.Kind | number;
-    pubkey: string;
-    sig?: string;
-    tags?: string[][];
-}
-
-export interface NostrEventDocument extends nostrTools.Event {
-    contentCut: boolean;
-    tagsCut: boolean;
-
-    replyEventId?: string;
-    rootEventId?: string;
-    parentEventId?: string;
 }
 
 export interface IDocumentConstructor { new(rawData: any, parent: ContentDocument | undefined): ContentDocument; }

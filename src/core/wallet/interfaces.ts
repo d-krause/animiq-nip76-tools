@@ -8,10 +8,10 @@ export interface IWalletStorage {
 }
 
 export interface WalletStorageArgs {
-    key?: HDKey;
-    lockwords?: Int32Array;
     publicKey: string;
     privateKey?: string;
+    key?: HDKey;
+    lockwords?: Int32Array;
 }
 
 export interface WalletConstructorArgs extends WalletStorageArgs {

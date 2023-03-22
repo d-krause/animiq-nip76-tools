@@ -14,36 +14,28 @@ let ap = kp.derive(`m/44'/1237'/0'/123'/456'`);
 let sp = kp.derive(`m/44'/1237'/0'/789'/999'`);
 
 
-describe('nprivatethread1', () => {
+describe('nprivatechan', () => {
 
     it('it should encode and decode with a password', async () => {
 
         const testPassword = 'example password 1';
-        const testNip19Text = 'nprivatethread11798gya5tnk2jl5x6ewrc4cxnntshdtj0frwsapaq4ujl02drrpt8hvu8nlsgurhcdzngrvw3v6d2xs78jtqy76cen4gg6uy2n9f55qecxyql53f2zumty8ahnrp2738q8qtfx5dqmmh48g5wrh2c5092tk6u6hz0wu4e8pvtmzzgenxvscgk0p9fvdyfcv4pns5nzaqyz4klfrj4s0hdtflxeu6ktj42szwguhusxsd55ygcmsmmvf8tukpex89870pezpe2zskf78g0h0gqjfks4xstpxthjk7vcwh59zeumd9v5kkv4xqlswhxz';
+        const testNip19Text = 'nprivatechan1798gya5tnk2jl5x6ewrc4cxnntshdtj0frwsapaq4ujl02drrpt8hvu8nlsgurhcdzngrvw3v6d2xs78jtqy76cen4gg6uy2n9f55qecxyql53f2zumty8ahnrp2738q8pd0tyw0xz8hr0evgv9075tj3ykeqtash2x4vsvgya3hjewr8qhk58uy68wvntlzser84hpq3vnlky5fs7nk0z';
 
         const testPointer: nip19Extension.PrivateChannelPointer = {
             ownerPubKey: kp.nostrPubKey,
-            addresses: {
-                pubkey: ap.publicKey,
-                chain: ap.chainCode,
-            },
-            secrets: {
-                pubkey: sp.publicKey,
-                chain: sp.chainCode,
-            }
+            signingKey: ap.publicKey,
+            cryptoKey: sp.publicKey,
         };
         const privatechannel1 = await nip19Extension.nprivateChannelEncode(testPointer, testPassword);
 
         expect(privatechannel1).toEqual(testNip19Text);
 
         let nip19DecodeResult = await nip19Extension.decode(testNip19Text, testPassword);
-        expect(nip19DecodeResult!.type).toBe('nprivatethread1');
+        expect(nip19DecodeResult!.type).toBe('nprivatechan');
         const resultPointer = nip19DecodeResult!.data as nip19Extension.PrivateChannelPointer;
         expect(resultPointer.ownerPubKey).toBe(testPointer.ownerPubKey);
-        expect(bytesToHex(resultPointer.addresses.pubkey)).toBe(bytesToHex(testPointer.addresses.pubkey));
-        expect(bytesToHex(resultPointer.addresses.chain)).toBe(bytesToHex(testPointer.addresses.chain));
-        expect(bytesToHex(resultPointer.secrets!.pubkey)).toBe(bytesToHex(testPointer.secrets!.pubkey));
-        expect(bytesToHex(resultPointer.secrets!.chain)).toBe(bytesToHex(testPointer.secrets!.chain));
+        expect(bytesToHex(resultPointer.signingKey)).toBe(bytesToHex(testPointer.signingKey));
+        expect(bytesToHex(resultPointer.cryptoKey)).toBe(bytesToHex(testPointer.cryptoKey));
     })
 
 
@@ -53,18 +45,12 @@ describe('nprivatethread1', () => {
         let receiverKey = kp.derive(`m/44'/1237'/0'/588'/2300'`);
         let normalizedReceiverPubKey = receiverKey.publicKey.slice(1);
         let normalizedSenderPubKey = senderKey.publicKey.slice(1);
-        const testNip19Text = 'nprivatethread11798gya5tnk2jl5x6ewrc4cxnng0xwmx9m72sc7p4w00j4cltts674t4wx7y8rqyqhhdufraepqlmuf35zqrjn0swvx3h2r07kh86cglrgatg0an84ha73h5gjrdgc3acdqclhtrs8zw8l758t0v73ttl02jzj0gte0zztzye86aknqlq4jm0x4dq8dwl2nehakuxlrf5a6hq5nk6kwa9y2ws9jjd8l52xa03hacsxlhtgdeq4w2t2ss0pmv0kc2gss7c4vtzygc9dtszewzsk7t28uxemluqzjldsedvjfzt6fcaeqq2rafnhmxmhumarf62mjdw6npa4d8al0epqe0xlwun8d8ekyph27gkzxeh3dnzurmc9xh4uru97nqnt8nqrvs85qmw66vjav7j5rxamqj0h5nfsm3x63zapv3j4962';
+        const testNip19Text = 'nprivatechan1798gya5tnk2jl5x6ewrc4cxnng0xwmx9m72sc7p4w00j4cltts674t4wx7y8rqyqhhdufraepqlmuf35zqrjn0swvx3h2r07kh86cglrgatg0an84ha73h5gjrdgc3acdp7e6mql6m79mee9q5rfms984c78gnh5qe3wqny6c9wfc2h0z2y0anhradcxw7lsewncmhpd6uvfxc2luuuj8tr8ppyr74yr4jyx0tclcqryrlqjdkvml25l3rlcfdd5r7zurtedemsmzp8tqh0qwhvelr4g0yw0pkkg208v6zlylc84nxw2na4dlukukyvkuu2sgj24cq';
 
         const testPointer: nip19Extension.PrivateChannelPointer = {
             ownerPubKey: kp.nostrPubKey,
-            addresses: {
-                pubkey: ap.publicKey,
-                chain: ap.chainCode,
-            },
-            secrets: {
-                pubkey: sp.publicKey,
-                chain: sp.chainCode,
-            },
+            signingKey: ap.publicKey,
+            cryptoKey: sp.publicKey,
             relays: [
                 'wss://relay.nostr.example.mydomain.example.com',
                 'wss://nostr.banana.com'
@@ -74,14 +60,12 @@ describe('nprivatethread1', () => {
         expect(privatechannel1).toEqual(testNip19Text);
 
         let nip19DecodeResult = await nip19Extension.decode(testNip19Text, [normalizedSenderPubKey, receiverKey.privateKey]);
-        expect(nip19DecodeResult!.type).toBe('nprivatethread1');
+        expect(nip19DecodeResult!.type).toBe('nprivatechan');
 
         const resultPointer = nip19DecodeResult!.data as nip19Extension.PrivateChannelPointer;
         expect(resultPointer.ownerPubKey).toBe(testPointer.ownerPubKey);
-        expect(bytesToHex(resultPointer.addresses.pubkey)).toBe(bytesToHex(testPointer.addresses.pubkey));
-        expect(bytesToHex(resultPointer.addresses.chain)).toBe(bytesToHex(testPointer.addresses.chain));
-        expect(bytesToHex(resultPointer.secrets!.pubkey)).toBe(bytesToHex(testPointer.secrets!.pubkey));
-        expect(bytesToHex(resultPointer.secrets!.chain)).toBe(bytesToHex(testPointer.secrets!.chain));
+        expect(bytesToHex(resultPointer.signingKey)).toBe(bytesToHex(testPointer.signingKey));
+        expect(bytesToHex(resultPointer.cryptoKey)).toBe(bytesToHex(testPointer.cryptoKey));
         expect(resultPointer.relays![0]).toBe(testPointer.relays![0]);
         expect(resultPointer.relays![1]).toBe(testPointer.relays![1]);
 
