@@ -13,20 +13,24 @@ export interface IChannelPayload extends ContentTemplate {
     last_known_index: number;
     chain_sign?: string;
     chain_crypto?: string;
+    relays?: string[];
 }
 
 export class PrivateChannel extends ContentDocument {
     override isTopLevel = true;
     override content!: IChannelPayload;
     hdkIndex!: HDKIndex;
-    posts = [] as PostDocument[];
 
-    static fromPointer(pointer: PrivateChannelPointer, publishParent: HDKey): PrivateChannel {
+    get posts(): PostDocument[] {
+        return (this.hdkIndex.documents as PostDocument[]).filter(x => !x.ref && x.content.kind === nostrTools.Kind.Text);
+    }
+
+    static fromPointer(pointer: PrivateChannelPointer): PrivateChannel {
         const signingKey = new HDKey({ publicKey: pointer.signingKey, chainCode: new Uint8Array(32), version: Versions.nip76API1 });
         const cryptoKey = new HDKey({ publicKey: pointer.cryptoKey, chainCode: new Uint8Array(32), version: Versions.nip76API1 });
         const channel = new PrivateChannel();
         channel.ownerPubKey = pointer.ownerPubKey;
-        channel.hdkIndex = new HDKIndex(HDKIndexType.TimeBased, signingKey, cryptoKey, publishParent);
+        channel.hdkIndex = new HDKIndex(HDKIndexType.TimeBased, signingKey, cryptoKey);
         channel.content = {
             kind: nostrTools.Kind.ChannelMetadata,
             pubkey: pointer.ownerPubKey,
@@ -45,6 +49,7 @@ export class PrivateChannel extends ContentDocument {
             this.content.last_known_index,
             this.content.chain_sign,
             this.content.chain_crypto,
+            this.content.relays
         ];
     }
 
@@ -56,6 +61,7 @@ export class PrivateChannel extends ContentDocument {
         this.content.last_known_index = raw[7];
         this.content.chain_sign = raw[8];
         this.content.chain_crypto = raw[9];
+        this.content.relays = raw[10];
         return raw;
     }
 
@@ -64,6 +70,7 @@ export class PrivateChannel extends ContentDocument {
             ownerPubKey: this.ownerPubKey,
             signingKey: this.hdkIndex.signingParent.publicKey,
             cryptoKey: this.hdkIndex.cryptoParent.publicKey,
+            relays: this.content.relays
         }, secret);
     }
 }

@@ -18,10 +18,8 @@ export class Wallet {
     isInSession = false;
 
     ownerPubKey!: string;
-    signingKey!: HDKey;
     documentsIndex!: HDKIndex;
     channels: PrivateChannel[] = [];
-    following: PrivateChannel[] = [];
 
 
     constructor(args: WalletConstructorArgs) {
@@ -39,21 +37,14 @@ export class Wallet {
                 this.isInSession = true;
             }
             this.nip76Root = this.master.derive(`m/44'/1237'/0'/1776'`);
-            this.signingKey = getReducedKey({
-                root: this.nip76Root,
-                wordset: this.lockwords,
-                offset: KeySetCommon.offsets[1]
-            });
             const followingKeyset = getReducedKeySet({
                 root: this.nip76Root,
                 wordset: this.lockwords,
                 sort: KeySetCommon.sort.desc,
                 offset: 20
             });
-            // this.followingIndex = IndexDocument.createIndex(IndexPermission.CreateByOwner, followingKeyset.ap, followingKeyset.sp);
             this.documentsIndex = new HDKIndex(HDKIndexType.Private | HDKIndexType.TimeBased, followingKeyset.ap, followingKeyset.sp);
             this.getChannel(0);
-            // this.beacons = Array(10).map((_, i) => this.beaconKey.deriveChildKey(i, true).nostrPubKey);
         }
     }
 
@@ -73,7 +64,6 @@ export class Wallet {
         this.master = HDKey.parseMasterSeed(randoms, Versions.nip76API1);
         this.setLockWords({ secret: ' ' });
         this.channels = [];
-        this.following = [];
     }
 
     reKey(secret?: string): void {
@@ -87,7 +77,6 @@ export class Wallet {
             this.setLockWords({ secret });
         }
         this.channels = [];
-        this.following = [];
         this.getChannel(0);
     }
 

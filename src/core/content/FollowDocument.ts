@@ -7,6 +7,7 @@ export interface IFollowPayload extends ContentTemplate {
     owner: string;
     signing_key: string;
     crypto_key: string;
+    relays?: string[];
 }
 
 export class FollowDocument extends ContentDocument {

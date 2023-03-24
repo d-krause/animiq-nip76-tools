@@ -2,7 +2,7 @@
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 import * as nostrTools from 'nostr-tools';
-import { HDKey } from '../keys';
+import { HDKey, HDKIndex } from '../keys';
 
 
 export interface ContentTemplate {
@@ -22,8 +22,10 @@ export interface NostrEventDocument extends nostrTools.Event {
 }
 
 export class ContentDocument {
+    hdkIndex!: HDKIndex;
     isTopLevel = false;
     ready = false;
+    verified = false;
     editing = false;
     content!: ContentTemplate;
     nostrEvent!: NostrEventDocument;
@@ -36,13 +38,6 @@ export class ContentDocument {
             this.content.sig,
             this.content.tags,
         ];
-    }
-
-    get hash(): string {
-        const payload = this.payload;
-        payload[2] = null;
-        const bytes = new TextEncoder().encode(JSON.stringify(payload));
-        return bytesToHex(sha256(bytes));
     }
 
     serialize(): string {

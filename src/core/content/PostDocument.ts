@@ -1,6 +1,6 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
+import * as nostrTools from 'nostr-tools';
 import { ContentDocument, ContentTemplate } from './ContentDocument';
-import { PrivateChannel } from './PrivateChannel';
 
 export interface IPostPayload extends ContentTemplate {
     text: string;
@@ -8,10 +8,29 @@ export interface IPostPayload extends ContentTemplate {
 
 export class PostDocument extends ContentDocument {
     override content!: IPostPayload;
-    channel!: PrivateChannel;
-    reactionTracker: { [key: string | symbol]: number } = {};
-    reactions: PostDocument[] = [];
-    replies: PostDocument[] = [];
+
+    get ref(): PostDocument | undefined {
+        if (this.content.tags && this.content.tags![0][0] === 'e') {
+            return this.hdkIndex.documents.find(x => x.nostrEvent.id === this.content.tags![0][1]) as PostDocument;
+        }
+    }
+
+    get replies(): PostDocument[] {
+        return (this.hdkIndex.documents as PostDocument[]).filter(x => x.ref === this && x.content.kind === nostrTools.Kind.Text);
+    }
+
+
+    get reactions(): PostDocument[] {
+        return (this.hdkIndex.documents as PostDocument[]).filter(x => x.ref === this && x.content.kind === nostrTools.Kind.Reaction);
+    }
+
+    get reactionTracker(): { [key: string | symbol]: number } {
+        return this.reactions.reduce((a: { [key: string | symbol]: number }, b: PostDocument) => {
+            const count = a[b.content.text!];
+            a[b.content.text!] = count ? count + 1 : 1;
+            return a;
+        }, {});
+    }
 
     override get payload(): any[] {
         return [...super.payload, this.content.text];

@@ -1,7 +1,7 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
 
-import { bytesToHex, concatBytes, randomBytes } from '@noble/hashes/utils';
-import { signSync } from '@noble/secp256k1';
+import { bytesToHex, concatBytes, hexToBytes, randomBytes } from '@noble/hashes/utils';
+import * as secp from '@noble/secp256k1';
 import { base64 } from '@scure/base';
 import * as nostrTools from 'nostr-tools';
 import { ContentDocument, FollowDocument, NostrEventDocument, PostDocument, PrivateChannel } from '../content';
@@ -16,15 +16,15 @@ export enum HDKIndexType {
 
 export class HDKIndex {
     eventTag: string;
+    documents: ContentDocument[] = [];
     constructor(
         public type: HDKIndexType,
         public signingParent: HDKey,
-        public cryptoParent: HDKey,
-        public guestSigner?: HDKey
+        public cryptoParent: HDKey
     ) {
-        if (!signingParent.privateKey && !guestSigner?.privateKey) {
-            throw new Error('privateKey is required on the signingParent.');
-        }
+        // if (!signingParent.privateKey && !guestSigner?.privateKey) {
+        //     throw new Error('privateKey is required on the signingParent.');
+        // }
         if (!this.isTimeBased && !this.isSequential) {
             throw new Error('HDKIndex must either be Sequential and TimeBased.');
         }
@@ -34,9 +34,9 @@ export class HDKIndex {
         if (this.isPrivate && !cryptoParent.privateKey) {
             throw new Error('privateKey is required on the cryptoParent when the type is Private.');
         }
-        if (this.isPrivate && guestSigner) {
-            throw new Error('guestSigner is not permitted when the type is Private.');
-        }
+        // if (this.isPrivate && guestSigner) {
+        //     throw new Error('guestSigner is not permitted when the type is Private.');
+        // }
         this.eventTag = signingParent.deriveChildKey(0, this.isPrivate).deriveChildKey(0, this.isPrivate).pubKeyHash;
     }
 
@@ -52,15 +52,23 @@ export class HDKIndex {
         return (this.type & HDKIndexType.Sequential) === HDKIndexType.Sequential;
     }
 
-    private getKeysFromIndex(docIndex: number, isTopLevel: boolean) {
-        let signingKey: HDKey;
-        if (this.signingParent.privateKey) {
-            signingKey = isTopLevel ? this.signingParent : this.signingParent.deriveChildKey(docIndex!, this.isPrivate);
-        } else if (this.guestSigner && !this.isPrivate) {
-            signingKey = isTopLevel ? this.guestSigner : this.guestSigner.deriveChildKey(docIndex!);
+    private getKeysFromIndex(docIndex: number, isTopLevel: boolean, privateKey?: string)
+        : { signingKey?: HDKey | null, cryptoKey: Uint8Array } {
+        let signingKey: HDKey | null = null;
+        if (isTopLevel) {
+            if (this.signingParent.privateKey) {
+                signingKey = this.signingParent;
+            }
+        } else if (privateKey) {
+            signingKey = new HDKey({
+                privateKey: hexToBytes(privateKey),
+                chainCode: this.signingParent.chainCode,
+                version: this.signingParent.version
+            }).deriveChildKey(docIndex);
         } else {
-            throw new Error('no valid signing key found on the index');
+            signingKey = this.signingParent.deriveChildKey(docIndex, this.isPrivate);
         }
+
         let cryptoKey: Uint8Array;
         if (this.isPrivate) {
             cryptoKey = isTopLevel ? this.cryptoParent.privateKey
@@ -72,22 +80,7 @@ export class HDKIndex {
         return { signingKey, cryptoKey };
     }
 
-    private getDocumentFromJson(json: string): ContentDocument {
-        const kind = parseInt(json.match(/\d+/)![0]);
-        switch (kind) {
-            case nostrTools.Kind.ChannelMetadata:
-                return new PrivateChannel();
-            case nostrTools.Kind.Text:
-            case nostrTools.Kind.Reaction:
-                return new PostDocument();
-            case nostrTools.Kind.Contacts:
-                return new FollowDocument();
-            default:
-                throw new Error(`Kind ${kind} not supported.`)
-        }
-    }
-
-    async createEvent(doc: ContentDocument, privateKey?: string, docIndex = 0): Promise<NostrEventDocument> {
+    async createEvent(doc: ContentDocument, privateKey: string, docIndex = 0): Promise<NostrEventDocument> {
 
         if (!docIndex && this.isSequential) {
             throw new Error('docIndex is required to create events on sequential HDKIndexType.');
@@ -99,11 +92,8 @@ export class HDKIndex {
         if (this.isTimeBased) {
             docIndex = cati.index1;
         }
-        const keyset = this.getKeysFromIndex(docIndex!, doc.isTopLevel);
 
-        if (!this.isPrivate) {
-            doc.content.sig = bytesToHex(signSync(doc.hash, privateKey!));
-        }
+        const keyset = this.getKeysFromIndex(docIndex!, doc.isTopLevel, privateKey);
         const content = new TextEncoder().encode(doc.serialize());
 
         const iv = randomBytes(16);
@@ -115,9 +105,9 @@ export class HDKIndex {
         event.tags = [['e', this.eventTag]];
         event.created_at = cati.created_at;
         event.kind = 17761;
-        event.pubkey = keyset.signingKey.nostrPubKey;
+        event.pubkey = keyset.signingKey!.nostrPubKey;
         event.content = base64.encode(concatBytes(iv, encrypted));
-        event.sig = nostrTools.signEvent(event, keyset.signingKey.hexPrivKey!) as any;
+        event.sig = nostrTools.signEvent(event, keyset.signingKey!.hexPrivKey!) as any;
         event.id = nostrTools.getEventHash(event);
 
         return event;
@@ -133,7 +123,6 @@ export class HDKIndex {
                 docIndex = cati.index1;
             }
             const keyset = this.getKeysFromIndex(docIndex!, isTopLevel);
-
             const encrypted = base64.decode(event.content);
             const iv = encrypted.slice(0, 16);
             const data = encrypted.slice(16);
@@ -143,15 +132,38 @@ export class HDKIndex {
             const json = new TextDecoder().decode(decrypted);
 
             const doc = this.getDocumentFromJson(json);
+            doc.hdkIndex = this;
             doc.deserialize(json);
             doc.ownerPubKey = doc.content.pubkey;
             doc.nostrEvent = event;
             doc.ready = true;
+            const signerKey = new HDKey({
+                publicKey: hexToBytes('02'+doc.content.pubkey),
+                chainCode: this.signingParent.chainCode,
+                version: this.signingParent.version
+            });
+            doc.verified = signerKey.deriveChildKey(docIndex).nostrPubKey === event.pubkey;
+            this.documents = [...this.documents, doc].sort((a, b) => b.nostrEvent.created_at - a.nostrEvent.created_at);
             return doc;
 
         } catch (e) {
             console.error('HDKIndex.readEvent error' + e);
             return undefined;
+        }
+    }
+
+    private getDocumentFromJson(json: string): ContentDocument {
+        const kind = parseInt(json.match(/\d+/)![0]);
+        switch (kind) {
+            case nostrTools.Kind.ChannelMetadata:
+                return new PrivateChannel();
+            case nostrTools.Kind.Text:
+            case nostrTools.Kind.Reaction:
+                return new PostDocument();
+            case nostrTools.Kind.Contacts:
+                return new FollowDocument();
+            default:
+                throw new Error(`Kind ${kind} not supported.`)
         }
     }
 }
