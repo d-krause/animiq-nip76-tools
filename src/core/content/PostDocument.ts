@@ -1,4 +1,5 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
+
 import * as nostrTools from 'nostr-tools';
 import { ContentDocument, ContentTemplate } from './ContentDocument';
 
@@ -38,7 +39,7 @@ export class PostDocument extends ContentDocument {
 
     override deserialize(payload: string): any[] {
         const raw = super.deserialize(payload);
-        this.content.text = raw[4];
+        this.content.text = raw[1];
         return raw;
     }
 }

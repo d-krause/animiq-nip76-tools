@@ -1,8 +1,8 @@
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha256';
-import { utf8ToBytes } from '@noble/hashes/utils';
-import * as secp256k1 from '@noble/secp256k1'
-import { bech32, utf8 } from '@scure/base'
+import { bytesToHex, concatBytes, hexToBytes, randomBytes, utf8ToBytes } from '@noble/hashes/utils';
+import * as secp256k1 from '@noble/secp256k1';
+import { bech32 } from '@scure/base';
 
 type TLV = { [t: number]: Uint8Array[] }
 
@@ -36,16 +36,16 @@ function encodeTLV(tlv: TLV): Uint8Array {
         })
     })
 
-    return secp256k1.utils.concatBytes(...entries)
+    return concatBytes(...entries)
 }
 
 async function encrypt(data: Uint8Array, key: Uint8Array): Promise<Uint8Array> {
-    const iv = secp256k1.utils.randomBytes(16);
+    const iv = randomBytes(16);
     const secretBytes = key.slice(0, 32);
     const alg = { name: 'AES-GCM', iv: iv, length: 256 } as AesKeyAlgorithm;
     const secretKey = await window.crypto.subtle.importKey('raw', secretBytes, alg, false, ['encrypt']);
     const encrypted = new Uint8Array(await window.crypto.subtle.encrypt(alg, secretKey, data));
-    const out = secp256k1.utils.concatBytes(iv, encrypted);
+    const out = concatBytes(iv, encrypted);
     return out;
 }
 
@@ -64,11 +64,25 @@ async function decrypt(data: Uint8Array, key: Uint8Array): Promise<Uint8Array | 
         return undefined;
     }
 }
+export enum PointerType {
+    Password = 1,                           // 0000 0001
+    SharedSecret = 1 << 1,                  // 0000 0010
+    HasSignKey = 1 << 2,                    // 0000 0100
+    HasSignChain = 1 << 3,                  // 0000 1000
+    HasCryptKey = 1 << 4,                   // 0001 0000
+    HasCryptChain = 1 << 5,                 // 0010 0000
+    HasBothKeys = (1 << 2) | (1 << 4),      // 0001 0100
+    HasBothChains = (1 << 3) | (1 << 5),    // 0010 1000
+    FullKeySet = (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5),    // 0011 1100
+}
 
 export type PrivateChannelPointer = {
-    ownerPubKey: string;
-    signingKey: Uint8Array;
-    cryptoKey: Uint8Array;
+    type: PointerType;
+    // ownerPubKey: string;
+    signingKey?: Uint8Array;
+    cryptoKey?: Uint8Array;
+    signingChain?: Uint8Array;
+    cryptoChain?: Uint8Array;
     relays?: string[]
 }
 
@@ -86,19 +100,36 @@ export async function nprivateChannelEncode(tp: PrivateChannelPointer, secret: s
     let cryptKey: Uint8Array;
     if (typeof (secret) === 'string') {
         cryptKey = keyFromSecretString(secret);
-    } else {
+        tp.type |= PointerType.Password;
+    } else if (secret instanceof Array) {
         cryptKey = keyFromSharedSecret(secret[0], secret[1]);
+        tp.type |= PointerType.Password;
+    } else {
+        throw new Error('Channel Pointers need a secret password or a public private key pair.')
     }
-    const ownerPubKey = secp256k1.utils.hexToBytes(tp.ownerPubKey);
+    let data = Uint8Array.from([0]);
+    if (tp.signingKey) {
+        data = concatBytes(data, tp.signingKey);
+        tp.type |= PointerType.HasSignKey;
+    }
+    if (tp.cryptoKey) {
+        data = concatBytes(data, tp.cryptoKey);
+        tp.type |= PointerType.HasCryptKey;
+    }
+    if (tp.signingChain) {
+        data = concatBytes(data, tp.signingChain);
+        tp.type |= PointerType.HasSignChain;
+    }
+    if (tp.cryptoChain) {
+        data = concatBytes(data, tp.cryptoChain);
+        tp.type |= PointerType.HasCryptChain;
+    }
     let relayData = encodeTLV({
         0: (tp.relays || []).map(url => new TextEncoder().encode(url))
-    })
-    const data = secp256k1.utils.concatBytes(
-        ownerPubKey,
-        tp.signingKey,
-        tp.cryptoKey,
-        relayData
-    );
+    });
+    data = concatBytes(data, relayData);
+    data[0] = tp.type;
+
     const encrypted = await encrypt(data, cryptKey);
     const words = bech32.toWords(encrypted);
     return bech32.encode('nprivatechan', words, Bech32MaxSize)
@@ -119,13 +150,37 @@ export async function decode(nip19: string, secret: string | Uint8Array[]): Prom
         let encrypted = Uint8Array.from(bech32.fromWords(words));
         let data = await decrypt(encrypted, cryptKey);
         if (!data) throw new Error('invalid decryption for nprivatechan');
-        let tlv = parseTLV(data.slice(98));
+        let signingKey: Uint8Array | undefined;
+        let cryptoKey: Uint8Array | undefined;
+        let signingChain: Uint8Array | undefined;
+        let cryptoChain: Uint8Array | undefined;
+        const pointerType = data.slice(0, 1) as any as PointerType;
+        let start = 1;
+        if ((pointerType & PointerType.HasSignKey) === PointerType.HasSignKey) {
+            signingKey = data.slice(start, start + 33);
+            start += 33;
+        }
+        if ((pointerType & PointerType.HasCryptKey) === PointerType.HasCryptKey) {
+            cryptoKey = data.slice(start, start + 33);
+            start += 33;
+        }
+        if ((pointerType & PointerType.HasSignChain) === PointerType.HasSignChain) {
+            signingChain = data.slice(start, start + 32);
+            start += 32;
+        }
+        if ((pointerType & PointerType.HasCryptChain) === PointerType.HasCryptChain) {
+            cryptoChain = data.slice(start, start + 32);
+            start += 32;
+        }
+        let tlv = parseTLV(data.slice(start));
         return {
             type: 'nprivatechan',
             data: {
-                ownerPubKey: secp256k1.utils.bytesToHex(data.slice(0, 32)),
-                signingKey: data.slice(32, 65),
-                cryptoKey: data.slice(65, 98),
+                type: pointerType,
+                signingKey,
+                cryptoKey,
+                signingChain,
+                cryptoChain,
                 relays: (tlv[0] || []).map(d => new TextDecoder().decode(d))
             }
         }

@@ -11,7 +11,7 @@ export interface WalletStorageArgs {
     publicKey: string;
     privateKey?: string;
     key?: HDKey;
-    lockwords?: Int32Array;
+    wordset?: Uint32Array;
 }
 
 export interface WalletConstructorArgs extends WalletStorageArgs {

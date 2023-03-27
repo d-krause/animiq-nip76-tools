@@ -216,7 +216,7 @@ export class HDKey {
         return childKey;
     }
     // path = 'm'
-    public deriveChildKey(index: number, hardened = false): HDKey {
+    deriveChildKey(index: number, hardened = false): HDKey {
         if (!this.publicKey || !this.chainCode) {
             throw new Error('No publicKey or chainCode set');
         }

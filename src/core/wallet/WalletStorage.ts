@@ -33,7 +33,7 @@ export class WebWalletStorage implements IWalletStorage {
 
     async save(args: WalletStorageArgs): Promise<boolean> {
         const isSession = !args.privateKey && !!WebWalletStorage.sessionExpireMinutes;
-        if (!args.key || (isSession && !args.key && !args.lockwords)) {
+        if (!args.key || (isSession && !args.key && !args.wordset)) {
             throw new Error('HD privateKey key needed for WebWalletStorage.save(). lockwords required for sessions.');
         }
         if (isSession && !WebWalletStorage.sessionExpireMinutes) {
@@ -43,7 +43,7 @@ export class WebWalletStorage implements IWalletStorage {
         if (storeSecret) {
             const keyBuffer = concatBytes(args.key.chainCode, args.key.privateKey);
             const cryptoBuffer = isSession
-                ? concatBytes(keyBuffer, new Uint8Array(args.lockwords!.buffer))
+                ? concatBytes(keyBuffer, new Uint8Array(args.wordset!.buffer))
                 : keyBuffer;
             const iv = window.crypto.getRandomValues(new Uint8Array(16));
             const alg = { name: 'AES-GCM', iv: iv, length: 256 } as AesKeyAlgorithm;
@@ -99,7 +99,7 @@ export class WebWalletStorage implements IWalletStorage {
                         privateKey: decrypted.slice(32, 64),
                         version: Versions.nip76API1
                     });
-                    rtn.lockwords = new Int32Array(decrypted.slice(64).buffer);
+                    rtn.wordset = new Uint32Array(decrypted.slice(64).buffer);
                 } else {
                     rtn.isInSession = false;
                 }

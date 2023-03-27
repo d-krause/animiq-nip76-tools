@@ -12,16 +12,11 @@ export function getCreatedAtIndexes(created_at?: number): { created_at: number, 
 }
 export interface KeySetReductionArgs {
     root: HDKey;
-    wordset: Int32Array;
+    wordset: Uint32Array;
     offset?: number;
     right?: boolean;
     map?: (n: number) => number;
     sort?: (a: number, b: number) => number;
-}
-
-export interface KeySet {
-    ap: HDKey;
-    sp: HDKey;
 }
 
 export function getIndexReducer(index: number): (hdk: HDKey, num: number) => HDKey {
@@ -37,24 +32,6 @@ export function getReducedKey(args: KeySetReductionArgs): HDKey {
         return wordset.reduceRight<HDKey>(reducer, args.root);
     } else {
         return wordset.reduce<HDKey>(reducer, args.root);
-    }
-}
-
-export function getReducedKeySet(args: KeySetReductionArgs): KeySet {
-    const reducer = getIndexReducer(args.offset || 0);
-    let wordset = args.wordset;
-    if (args.map) wordset = wordset.map(args.map);
-    if (args.sort) wordset = wordset.sort(args.sort);
-    if (args.right) {
-        const parent = wordset.slice(0, 4).reduceRight<HDKey>(reducer, args.root);
-        const ap = wordset.slice(4, 10).reduceRight<HDKey>(reducer, parent);
-        const sp = wordset.slice(10, 16).reduceRight<HDKey>(reducer, parent);
-        return { ap, sp };
-    } else {
-        const parent = wordset.slice(0, 4).reduce<HDKey>(reducer, args.root);
-        const ap = wordset.slice(4, 10).reduce<HDKey>(reducer, parent);
-        const sp = wordset.slice(10, 16).reduce<HDKey>(reducer, parent);
-        return { ap, sp };
     }
 }
 

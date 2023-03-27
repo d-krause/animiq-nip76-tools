@@ -22,7 +22,8 @@ describe('nprivatechan', () => {
         const testNip19Text = 'nprivatechan1798gya5tnk2jl5x6ewrc4cxnntshdtj0frwsapaq4ujl02drrpt8hvu8nlsgurhcdzngrvw3v6d2xs78jtqy76cen4gg6uy2n9f55qecxyql53f2zumty8ahnrp2738q8pd0tyw0xz8hr0evgv9075tj3ykeqtash2x4vsvgya3hjewr8qhk58uy68wvntlzser84hpq3vnlky5fs7nk0z';
 
         const testPointer: nip19Extension.PrivateChannelPointer = {
-            ownerPubKey: kp.nostrPubKey,
+            // ownerPubKey: kp.nostrPubKey,
+            type: 0,
             signingKey: ap.publicKey,
             cryptoKey: sp.publicKey,
         };
@@ -33,9 +34,9 @@ describe('nprivatechan', () => {
         let nip19DecodeResult = await nip19Extension.decode(testNip19Text, testPassword);
         expect(nip19DecodeResult!.type).toBe('nprivatechan');
         const resultPointer = nip19DecodeResult!.data as nip19Extension.PrivateChannelPointer;
-        expect(resultPointer.ownerPubKey).toBe(testPointer.ownerPubKey);
-        expect(bytesToHex(resultPointer.signingKey)).toBe(bytesToHex(testPointer.signingKey));
-        expect(bytesToHex(resultPointer.cryptoKey)).toBe(bytesToHex(testPointer.cryptoKey));
+        // expect(resultPointer.ownerPubKey).toBe(testPointer.ownerPubKey);
+        expect(bytesToHex(resultPointer.signingKey!)).toBe(bytesToHex(testPointer.signingKey!));
+        expect(bytesToHex(resultPointer.cryptoKey!)).toBe(bytesToHex(testPointer.cryptoKey!));
     })
 
 
@@ -48,7 +49,8 @@ describe('nprivatechan', () => {
         const testNip19Text = 'nprivatechan1798gya5tnk2jl5x6ewrc4cxnng0xwmx9m72sc7p4w00j4cltts674t4wx7y8rqyqhhdufraepqlmuf35zqrjn0swvx3h2r07kh86cglrgatg0an84ha73h5gjrdgc3acdp7e6mql6m79mee9q5rfms984c78gnh5qe3wqny6c9wfc2h0z2y0anhradcxw7lsewncmhpd6uvfxc2luuuj8tr8ppyr74yr4jyx0tclcqryrlqjdkvml25l3rlcfdd5r7zurtedemsmzp8tqh0qwhvelr4g0yw0pkkg208v6zlylc84nxw2na4dlukukyvkuu2sgj24cq';
 
         const testPointer: nip19Extension.PrivateChannelPointer = {
-            ownerPubKey: kp.nostrPubKey,
+            type: 0,
+            // ownerPubKey: kp.nostrPubKey,
             signingKey: ap.publicKey,
             cryptoKey: sp.publicKey,
             relays: [
@@ -63,9 +65,9 @@ describe('nprivatechan', () => {
         expect(nip19DecodeResult!.type).toBe('nprivatechan');
 
         const resultPointer = nip19DecodeResult!.data as nip19Extension.PrivateChannelPointer;
-        expect(resultPointer.ownerPubKey).toBe(testPointer.ownerPubKey);
-        expect(bytesToHex(resultPointer.signingKey)).toBe(bytesToHex(testPointer.signingKey));
-        expect(bytesToHex(resultPointer.cryptoKey)).toBe(bytesToHex(testPointer.cryptoKey));
+        // expect(resultPointer.ownerPubKey).toBe(testPointer.ownerPubKey);
+        expect(bytesToHex(resultPointer.signingKey!)).toBe(bytesToHex(testPointer.signingKey!));
+        expect(bytesToHex(resultPointer.cryptoKey!)).toBe(bytesToHex(testPointer.cryptoKey!));
         expect(resultPointer.relays![0]).toBe(testPointer.relays![0]);
         expect(resultPointer.relays![1]).toBe(testPointer.relays![1]);
 

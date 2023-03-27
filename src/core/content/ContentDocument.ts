@@ -1,14 +1,11 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
-import { sha256 } from '@noble/hashes/sha256';
-import { bytesToHex } from '@noble/hashes/utils';
 import * as nostrTools from 'nostr-tools';
-import { HDKey, HDKIndex } from '../keys';
+import { HDKIndex } from '../keys';
 
 
 export interface ContentTemplate {
     kind: nostrTools.Kind | number;
     pubkey: string;
-    sig?: string;
     tags?: string[][];
 }
 
@@ -23,7 +20,7 @@ export interface NostrEventDocument extends nostrTools.Event {
 
 export class ContentDocument {
     hdkIndex!: HDKIndex;
-    isTopLevel = false;
+    docIndex = 0;
     ready = false;
     verified = false;
     editing = false;
@@ -32,12 +29,11 @@ export class ContentDocument {
     ownerPubKey!: string;
 
     get payload(): any[] {
-        return [
+        return [[
             this.content.kind,
             this.content.pubkey,
-            this.content.sig,
             this.content.tags,
-        ];
+        ]];
     }
 
     serialize(): string {
@@ -47,10 +43,9 @@ export class ContentDocument {
     deserialize(payload: string): any[] {
         const raw = JSON.parse(payload);
         this.content = {
-            kind: raw[0],
-            pubkey: raw[1],
-            sig: raw[2],
-            tags: raw[3],
+            kind: raw[0][0],
+            pubkey: raw[0][1],
+            tags: raw[0][2],
         };
         return raw;
     }
