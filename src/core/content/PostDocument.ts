@@ -12,17 +12,17 @@ export class PostDocument extends ContentDocument {
 
     get ref(): PostDocument | undefined {
         if (this.content.tags && this.content.tags![0][0] === 'e') {
-            return this.hdkIndex.documents.find(x => x.nostrEvent.id === this.content.tags![0][1]) as PostDocument;
+            return this.dkxParent.documents.find(x => x.nostrEvent.id === this.content.tags![0][1]) as PostDocument;
         }
     }
 
     get replies(): PostDocument[] {
-        return (this.hdkIndex.documents as PostDocument[]).filter(x => x.ref === this && x.content.kind === nostrTools.Kind.Text);
+            return (this.dkxParent.documents as PostDocument[]).filter(x => x.ref === this && x.content.kind === nostrTools.Kind.Text);
     }
 
 
     get reactions(): PostDocument[] {
-        return (this.hdkIndex.documents as PostDocument[]).filter(x => x.ref === this && x.content.kind === nostrTools.Kind.Reaction);
+            return (this.dkxParent.documents as PostDocument[]).filter(x => x.ref === this && x.content.kind === nostrTools.Kind.Reaction);
     }
 
     get reactionTracker(): { [key: string | symbol]: number } {

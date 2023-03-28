@@ -101,12 +101,10 @@ export class Wallet {
         if (!this.wordset || !this.master || !this.root) {
             throw new Error('locknums and master needed before getChannel().');
         }
-        const index = this.documentsIndex.documents.length;
-        const channel = new PrivateChannel();
-        channel.docIndex = index + 1;// + KeySetCommon.offsets[1];
-        const keyset = this.documentsIndex.getKeysFromIndex(channel.docIndex);
-        keyset.cryptoKey.wipePrivateData();
-        channel.hdkIndex = new HDKIndex(HDKIndexType.TimeBased, keyset.signingKey!, keyset.cryptoKey);
+        const index = this.documentsIndex.documents.length + 1;
+        const keyset = this.documentsIndex.getKeysFromIndex(index);
+        const channel = new PrivateChannel(keyset.signingKey!, keyset.cryptoKey);
+        channel.docIndex = index;
         channel.ownerPubKey = this.ownerPubKey;
         channel.content = {
             kind: nostrTools.Kind.ChannelMetadata,

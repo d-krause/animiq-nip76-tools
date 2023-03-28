@@ -107,7 +107,7 @@ export async function nprivateChannelEncode(tp: PrivateChannelPointer, secret: s
     } else {
         throw new Error('Channel Pointers need a secret password or a public private key pair.')
     }
-    let data = Uint8Array.from([0]);
+    let data = new Uint8Array();
     if (tp.signingKey) {
         data = concatBytes(data, tp.signingKey);
         tp.type |= PointerType.HasSignKey;
@@ -128,9 +128,8 @@ export async function nprivateChannelEncode(tp: PrivateChannelPointer, secret: s
         0: (tp.relays || []).map(url => new TextEncoder().encode(url))
     });
     data = concatBytes(data, relayData);
-    data[0] = tp.type;
 
-    const encrypted = await encrypt(data, cryptKey);
+    const encrypted = concatBytes(Uint8Array.from([tp.type]), await encrypt(data, cryptKey));
     const words = bech32.toWords(encrypted);
     return bech32.encode('nprivatechan', words, Bech32MaxSize)
 }

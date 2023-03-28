@@ -19,7 +19,7 @@ export interface NostrEventDocument extends nostrTools.Event {
 }
 
 export class ContentDocument {
-    hdkIndex!: HDKIndex;
+    dkxParent!: HDKIndex;
     docIndex = 0;
     ready = false;
     verified = false;
@@ -51,4 +51,4 @@ export class ContentDocument {
     }
 }
 
-export interface IDocumentConstructor { new(rawData: any, parent: ContentDocument | undefined): ContentDocument; }
+// export interface IDocumentConstructor { new(rawData: any, parent: ContentDocument | undefined): ContentDocument; }

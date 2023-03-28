@@ -1,9 +1,10 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
 
+import { sha256 } from '@noble/hashes/sha256';
 import { concatBytes, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { base64 } from '@scure/base';
 import * as nostrTools from 'nostr-tools';
-import { ContentDocument, FollowDocument, NostrEventDocument, PostDocument, PrivateChannel } from '../content';
+import { ContentDocument, FollowDocument, Invitation, NostrEventDocument, PostDocument, PrivateChannel } from '../content';
 import { getCreatedAtIndexes, getReducedKey } from '../util';
 import { HDKey } from './HDKey';
 
@@ -38,7 +39,7 @@ export class HDKIndex {
             throw new Error('privateKey is required on the cryptoParent when the type is Private.');
         }
         if (this.isPrivate && !this.wordset) {
-            throw new Error('wordst is required for private indexes');
+            this.wordset = new Uint32Array((sha256(signingParent.privateKey)).buffer);
         }
         this.eventTag = signingParent.deriveChildKey(0, this.isPrivate).deriveChildKey(0, this.isPrivate).pubKeyHash;
     }
@@ -105,12 +106,13 @@ export class HDKIndex {
         event.content = base64.encode(concatBytes(iv, encrypted));
         event.sig = nostrTools.signEvent(event, keyset.signingKey!.hexPrivKey!) as any;
         event.id = nostrTools.getEventHash(event);
+        doc.nostrEvent = event;
 
         return event;
     }
 
     async readEvent(event: NostrEventDocument, sequentialIndex?: number): Promise<ContentDocument | undefined> {
-        if (this.isSequential && !sequentialIndex) {
+        if (this.isSequential && !sequentialIndex === undefined) {
             throw new Error('docIndex is required to read events on sequential HDKIndexType.');
         }
         try {
@@ -135,16 +137,22 @@ export class HDKIndex {
 
     private getDocumentFromJson(json: string, docIndex: number, event: NostrEventDocument, keyset: DocumentKeyset): ContentDocument {
 
-        const kind = parseInt(json.match(/\d+/)![0]);
         let doc: ContentDocument;
+        const kind = parseInt(json.match(/\d+/)![0]);
+        const existing = this.isSequential
+            ? this.documents.find(x => x.docIndex === docIndex)
+            : this.documents.find(x => x.nostrEvent?.pubkey === event.pubkey);
 
         switch (kind) {
             case nostrTools.Kind.ChannelMetadata:
-                doc = new PrivateChannel();
+                doc = new PrivateChannel(keyset.signingKey!, keyset.cryptoKey, existing as PrivateChannel);
                 break;
             case nostrTools.Kind.Text:
             case nostrTools.Kind.Reaction:
                 doc = new PostDocument();
+                break;
+            case 1776:
+                doc = new Invitation();
                 break;
             case nostrTools.Kind.Contacts:
                 doc = new FollowDocument();
@@ -154,38 +162,20 @@ export class HDKIndex {
         }
 
         doc.deserialize(json);
+        const publicKey = !this.isPrivate && doc.content.pubkey ? hexToBytes('02' + doc.content.pubkey) : this.signingParent.publicKey;
+        const signerKey = new HDKey({ publicKey, chainCode: this.signingParent.chainCode, version: this.signingParent.version });
+        doc.verified = signerKey.deriveChildKey(docIndex).nostrPubKey === event.pubkey;
         doc.ownerPubKey = doc.content.pubkey;
         doc.docIndex = docIndex;
         doc.nostrEvent = event;
+        doc.dkxParent = this;
+        doc.ready = true;
 
-        //hdkIndex
-        if (doc instanceof PrivateChannel) {
-            doc.hdkIndex = new HDKIndex(HDKIndexType.TimeBased, keyset.signingKey!, keyset.cryptoKey);
-        } else {
-            doc.hdkIndex = this;
-        }
-
-        // verification
-        if (!this.isPrivate && doc.content.pubkey) {
-            const signerKey = new HDKey({
-                publicKey: hexToBytes('02' + doc.content.pubkey),
-                chainCode: this.signingParent.chainCode,
-                version: this.signingParent.version
-            });
-            doc.verified = signerKey.deriveChildKey(docIndex).nostrPubKey === event.pubkey;
-        } else {
-            doc.verified = this.isPrivate;
-        }
-
-        // place in documents
-        const doci = this.documents.findIndex(x => x.docIndex === docIndex);
-        if (doci > -1) {
-            doc.hdkIndex.documents = this.documents[doci].hdkIndex.documents;
-            this.documents.splice(doci, 1);
+        if (existing) {
+            const i = this.documents.indexOf(existing);
+            this.documents.splice(i, 1);
         }
         this.documents = [...this.documents, doc].sort((a, b) => b.nostrEvent?.created_at - a.nostrEvent?.created_at);
-
-        doc.ready = true;
 
         return doc;
     }
