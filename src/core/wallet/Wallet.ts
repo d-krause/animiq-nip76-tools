@@ -49,7 +49,10 @@ export class Wallet {
     }
 
     get rsvps(): Invitation[] {
-        return (this.documentsIndex.documents as Invitation[]).filter(x => x.content.kind === 1776);
+        return (this.documentsIndex.documents as Invitation[]).filter(x => x.content.kind === 1776).map(x => {
+            x.channel = this.channels.find(c => c.dkxPost.signingParent.nostrPubKey === x.content.signingParent?.nostrPubKey)!;
+            return x;
+        }).filter(x => !!x.channel);
     }
 
     async saveWallet(privateKey?: string) {

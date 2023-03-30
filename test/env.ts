@@ -10,6 +10,6 @@ import { TextEncoder, TextDecoder } from 'util'
 Object.defineProperty(globalThis.self, "crypto", {
   value: {
     subtle: crypto.webcrypto.subtle,
-    getRandomValues: crypto.webcrypto.getRandomValues
+    getRandomValues: crypto.getRandomValues
   },
 });

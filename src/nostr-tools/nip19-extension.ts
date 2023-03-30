@@ -43,8 +43,8 @@ async function encrypt(data: Uint8Array, key: Uint8Array): Promise<Uint8Array> {
     const iv = randomBytes(16);
     const secretBytes = key.slice(0, 32);
     const alg = { name: 'AES-GCM', iv: iv, length: 256 } as AesKeyAlgorithm;
-    const secretKey = await window.crypto.subtle.importKey('raw', secretBytes, alg, false, ['encrypt']);
-    const encrypted = new Uint8Array(await window.crypto.subtle.encrypt(alg, secretKey, data));
+    const secretKey = await globalThis.crypto.subtle.importKey('raw', secretBytes, alg, false, ['encrypt']);
+    const encrypted = new Uint8Array(await globalThis.crypto.subtle.encrypt(alg, secretKey, data));
     const out = concatBytes(iv, encrypted);
     return out;
 }
@@ -56,8 +56,8 @@ async function decrypt(data: Uint8Array, key: Uint8Array): Promise<Uint8Array | 
         const payload = encrypted.slice(16);
         const secretBytes = key.slice(0, 32);
         const alg = { name: 'AES-GCM', iv: iv2, length: 256 } as AesKeyAlgorithm;
-        const secretKey = await window.crypto.subtle.importKey('raw', secretBytes, alg, false, ['decrypt']);
-        const decrypted = new Uint8Array(await window.crypto.subtle.decrypt(alg, secretKey, payload));
+        const secretKey = await globalThis.crypto.subtle.importKey('raw', secretBytes, alg, false, ['decrypt']);
+        const decrypted = new Uint8Array(await globalThis.crypto.subtle.decrypt(alg, secretKey, payload));
         return decrypted;
     } catch (e) {
         console.log('decrypt error' + e);

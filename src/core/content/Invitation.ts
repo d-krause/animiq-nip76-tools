@@ -4,6 +4,7 @@ import { nip19Extension } from '../../nostr-tools';
 import { nprivateChannelEncode, PrivateChannelPointer } from '../../nostr-tools/nip19-extension';
 import { HDKey, Versions } from '../keys';
 import { ContentDocument, ContentTemplate } from './ContentDocument';
+import { PrivateChannel } from './PrivateChannel';
 
 export interface IInvitationPayload extends ContentTemplate {
     for?: string;
@@ -14,8 +15,11 @@ export interface IInvitationPayload extends ContentTemplate {
 }
 
 export class Invitation extends ContentDocument {
+    
     rsvps: Invitation[] = [];
     pointer!: nip19Extension.PrivateChannelPointer; 
+    channel!: PrivateChannel;
+
     override content!: IInvitationPayload;
     override get payload(): any[] {
         return [

@@ -88,6 +88,23 @@ export class HDKIndex {
         return { signingKey, cryptoKey };
     }
 
+    async createDeleteEvent(doc: ContentDocument, privateKey: string): Promise<NostrEventDocument> {
+
+        const cati = getCreatedAtIndexes();
+        const keyset = this.getKeysFromIndex(doc.docIndex, privateKey);
+        const event = nostrTools.getBlankEvent() as NostrEventDocument;
+        event.tags = [['e', doc.nostrEvent.id]];
+        event.created_at = cati.created_at;
+        event.kind = nostrTools.Kind.EventDeletion;
+        event.pubkey = keyset.signingKey!.nostrPubKey;
+        // event.content = undefined;
+        event.sig = nostrTools.signEvent(event, keyset.signingKey!.hexPrivKey!) as any;
+        event.id = nostrTools.getEventHash(event);
+        doc.nostrEvent = event;
+
+        return event;
+    }
+
     async createEvent(doc: ContentDocument, privateKey: string): Promise<NostrEventDocument> {
 
         if (!doc.docIndex && this.isSequential) {
