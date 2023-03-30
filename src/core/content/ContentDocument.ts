@@ -20,7 +20,7 @@ export interface NostrEventDocument extends nostrTools.Event {
 
 export class ContentDocument {
     dkxParent!: HDKIndex;
-    docIndex = 0;
+    docIndex!: number;
     ready = false;
     verified = false;
     editing = false;

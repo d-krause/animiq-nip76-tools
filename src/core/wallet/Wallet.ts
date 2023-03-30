@@ -3,10 +3,12 @@
 import { sha512 } from '@noble/hashes/sha512';
 import { hexToBytes } from '@noble/hashes/utils';
 import * as nostrTools from 'nostr-tools';
-import { PrivateChannel } from '../content';
+import { Invitation, NostrEventDocument, PrivateChannel } from '../content';
 import { HDKey, HDKIndex, HDKIndexType, Versions } from '../keys';
 import { getReducedKey } from '../util';
 import { IWalletStorage, WalletConstructorArgs } from './interfaces';
+
+export const walletRsvpDocumentsOffset = 0x10000000;
 
 export class Wallet {
 
@@ -44,6 +46,10 @@ export class Wallet {
 
     get channels(): PrivateChannel[] {
         return (this.documentsIndex.documents as PrivateChannel[]).filter(x => x.content.kind === nostrTools.Kind.ChannelMetadata);
+    }
+
+    get rsvps(): Invitation[] {
+        return (this.documentsIndex.documents as Invitation[]).filter(x => x.content.kind === 1776);
     }
 
     async saveWallet(privateKey?: string) {
@@ -101,9 +107,10 @@ export class Wallet {
         if (!this.wordset || !this.master || !this.root) {
             throw new Error('locknums and master needed before getChannel().');
         }
-        const index = this.documentsIndex.documents.length + 1;
+        const index = this.channels.filter(x => x.ownerPubKey === this.ownerPubKey).length + 1;
         const keyset = this.documentsIndex.getKeysFromIndex(index);
         const channel = new PrivateChannel(keyset.signingKey!, keyset.cryptoKey);
+        channel.nostrEvent = { pubkey: keyset.signingKey!.nostrPubKey } as NostrEventDocument;
         channel.docIndex = index;
         channel.ownerPubKey = this.ownerPubKey;
         channel.content = {
@@ -111,7 +118,7 @@ export class Wallet {
             name: 'New Channel ' + index,
             pubkey: this.ownerPubKey,
         };
-        this.documentsIndex.documents[index] = channel;
+        this.documentsIndex.documents.push(channel);
         return channel;
     }
 }

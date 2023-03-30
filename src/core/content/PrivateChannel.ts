@@ -17,16 +17,28 @@ export interface IChannelPayload extends ContentTemplate {
 export class PrivateChannel extends ContentDocument {
     override content!: IChannelPayload;
     dkxPost: HDKIndex;
+    dkxRsvp: HDKIndex;
     dkxInvite!: HDKIndex;
+    invitation!: Invitation;
 
     constructor(signingKey: HDKey, cryptoKey: HDKey, existing?: PrivateChannel) {
         super();
         this.dkxPost = new HDKIndex(HDKIndexType.TimeBased, signingKey, cryptoKey);
-        if (signingKey?.privateKey) {
-            this.dkxInvite = new HDKIndex(HDKIndexType.Sequential | HDKIndexType.Private, signingKey!, cryptoKey);
+        this.dkxRsvp = new HDKIndex(
+            HDKIndexType.TimeBased,
+            signingKey.deriveChildKey(0).deriveChildKey(0),
+            cryptoKey.deriveChildKey(0).deriveChildKey(0)
+        );
+        if (signingKey.privateKey) {
+            this.dkxInvite = new HDKIndex(HDKIndexType.Sequential | HDKIndexType.Private, signingKey, cryptoKey);
         }
         if (existing) {
+            // we just reloaded after editing, keeping the same documents arrays
             this.dkxPost.documents = existing.dkxPost.documents;
+            this.dkxRsvp.documents = existing.dkxRsvp.documents;
+            if (this.dkxInvite && existing.dkxInvite) {
+                this.dkxInvite.documents = existing.dkxInvite.documents;
+            }
         }
     }
 
@@ -35,19 +47,14 @@ export class PrivateChannel extends ContentDocument {
     }
 
     get invites(): Invitation[] {
-        return this.dkxInvite.documents as Invitation[];
+        return (this.dkxInvite.documents as Invitation[]).map(invite => {
+            invite.rsvps = this.rsvps.filter(x => x.content.docIndex === invite.docIndex)
+            return invite;
+        });
     }
 
-    static fromPointer(pointer: PrivateChannelPointer): PrivateChannel {
-        const signingKey = new HDKey({ publicKey: pointer.signingKey, chainCode: new Uint8Array(32), version: Versions.nip76API1 });
-        const cryptoKey = new HDKey({ publicKey: pointer.cryptoKey, chainCode: new Uint8Array(32), version: Versions.nip76API1 });
-        const channel = new PrivateChannel(signingKey, cryptoKey);
-        // channel.ownerPubKey = pointer.ownerPubKey;
-        channel.content = {
-            kind: nostrTools.Kind.ChannelMetadata,
-            pubkey: '',
-        };
-        return channel;
+    get rsvps(): Invitation[] {
+        return this.dkxRsvp.documents as Invitation[];
     }
 
     override get payload(): any[] {
@@ -69,14 +76,5 @@ export class PrivateChannel extends ContentDocument {
         this.content.picture = raw[1][2];
         this.content.relays = raw[1][3];
         return raw;
-    }
-
-    async getChannelPointer(secret: string | Uint8Array[] = ''): Promise<string> {
-        return nprivateChannelEncode({
-            type: 0,
-            signingKey: this.dkxPost.signingParent.publicKey,
-            cryptoKey: this.dkxPost.cryptoParent.publicKey,
-            relays: this.content.relays
-        }, secret);
     }
 }

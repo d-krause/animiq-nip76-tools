@@ -4,14 +4,17 @@ import { sha256 } from '@noble/hashes/sha256';
 import { concatBytes, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { base64 } from '@scure/base';
 import * as nostrTools from 'nostr-tools';
+import { PointerType, PrivateChannelPointer } from '../../nostr-tools/nip19-extension';
 import { ContentDocument, FollowDocument, Invitation, NostrEventDocument, PostDocument, PrivateChannel } from '../content';
 import { getCreatedAtIndexes, getReducedKey } from '../util';
 import { HDKey } from './HDKey';
+import { Versions } from './Versions';
 
 export enum HDKIndexType {
     Private = 1,            // 0001
     Sequential = 1 << 1,    // 0010
     TimeBased = 1 << 2,     // 0100
+    Singleton = 1 << 3,     // 1000
 }
 
 interface DocumentKeyset {
@@ -29,8 +32,8 @@ export class HDKIndex {
         public cryptoParent: HDKey,
         public wordset?: Uint32Array
     ) {
-        if (!this.isTimeBased && !this.isSequential) {
-            throw new Error('HDKIndex must either be Sequential and TimeBased.');
+        if (!this.isTimeBased && !this.isSequential && !this.isSingleton) {
+            throw new Error('HDKIndex must either be Sequential, TimeBased or Singleton.');
         }
         if (this.isTimeBased && this.isSequential) {
             throw new Error('HDKIndex cannot be both Sequential and TimeBased.');
@@ -56,10 +59,17 @@ export class HDKIndex {
         return (this.type & HDKIndexType.Sequential) === HDKIndexType.Sequential;
     }
 
+    get isSingleton(): boolean {
+        return (this.type & HDKIndexType.Singleton) === HDKIndexType.Singleton;
+    }
+
     getKeysFromIndex(docIndex: number, privateKey?: string): DocumentKeyset {
         let signingKey: HDKey | undefined = undefined;
         let cryptoKey: HDKey;
-        if (this.isPrivate) {
+        if (this.isSingleton) {
+            signingKey = this.signingParent;
+            cryptoKey = this.cryptoParent;
+        } else if (this.isPrivate) {
             if (this.signingParent.privateKey) {
                 signingKey = getReducedKey({ root: this.signingParent, offset: docIndex, wordset: this.wordset!.slice(0, 4) });
             }
@@ -117,7 +127,7 @@ export class HDKIndex {
         }
         try {
             const cati = getCreatedAtIndexes(event.created_at);
-            const docIndex = this.isSequential ? sequentialIndex! : cati.index1;
+            const docIndex = this.isTimeBased ? cati.index1 : sequentialIndex!;
             const keyset = this.getKeysFromIndex(docIndex!);
             const keydata = keyset.cryptoKey.publicKey.slice(1);
             const encrypted = base64.decode(event.content);
@@ -127,7 +137,7 @@ export class HDKIndex {
             const secretKey = await globalThis.crypto.subtle.importKey('raw', keydata, alg, false, ['decrypt']);
             const decrypted = new Uint8Array(await globalThis.crypto.subtle.decrypt(alg, secretKey, data));
             const json = new TextDecoder().decode(decrypted);
-            return this.getDocumentFromJson(json, docIndex, event, keyset);
+            return this.getDocumentFromJson(json, event, keyset, docIndex);
         } catch (e) {
             if (event.created_at > 1679660971)
                 console.error('HDKIndex.readEvent error', event);
@@ -135,14 +145,11 @@ export class HDKIndex {
         }
     }
 
-    private getDocumentFromJson(json: string, docIndex: number, event: NostrEventDocument, keyset: DocumentKeyset): ContentDocument {
+    private getDocumentFromJson(json: string, event: NostrEventDocument, keyset: DocumentKeyset, docIndex?: number): ContentDocument {
 
         let doc: ContentDocument;
+        let existing = this.documents.find(x => x.nostrEvent?.pubkey === event.pubkey);
         const kind = parseInt(json.match(/\d+/)![0]);
-        const existing = this.isSequential
-            ? this.documents.find(x => x.docIndex === docIndex)
-            : this.documents.find(x => x.nostrEvent?.pubkey === event.pubkey);
-
         switch (kind) {
             case nostrTools.Kind.ChannelMetadata:
                 doc = new PrivateChannel(keyset.signingKey!, keyset.cryptoKey, existing as PrivateChannel);
@@ -162,11 +169,13 @@ export class HDKIndex {
         }
 
         doc.deserialize(json);
-        const publicKey = !this.isPrivate && doc.content.pubkey ? hexToBytes('02' + doc.content.pubkey) : this.signingParent.publicKey;
-        const signerKey = new HDKey({ publicKey, chainCode: this.signingParent.chainCode, version: this.signingParent.version });
-        doc.verified = signerKey.deriveChildKey(docIndex).nostrPubKey === event.pubkey;
+        if (docIndex) {
+            const publicKey = !this.isPrivate && doc.content.pubkey ? hexToBytes('02' + doc.content.pubkey) : this.signingParent.publicKey;
+            const signerKey = new HDKey({ publicKey, chainCode: this.signingParent.chainCode, version: this.signingParent.version });
+            doc.verified = signerKey.deriveChildKey(docIndex).nostrPubKey === event.pubkey;
+            doc.docIndex = docIndex;
+        }
         doc.ownerPubKey = doc.content.pubkey;
-        doc.docIndex = docIndex;
         doc.nostrEvent = event;
         doc.dkxParent = this;
         doc.ready = true;
@@ -188,5 +197,26 @@ export class HDKIndex {
         } else {
             return [];
         }
+    }
+
+    static fromChannelPointer(pointer: PrivateChannelPointer): HDKIndex {
+        if ((pointer.type & PointerType.HasBothKeys) != PointerType.HasBothKeys) {
+            throw new Error('Cannot create HDKIndex without both a signing and crypto parent key.')
+        }
+        const indexType = (pointer.type & PointerType.FullKeySet) === PointerType.FullKeySet
+            ? HDKIndexType.TimeBased
+            : HDKIndexType.Singleton;
+        const signingKey = new HDKey({
+            publicKey: pointer.signingKey,
+            chainCode: pointer.signingChain || new Uint8Array(32),
+            version: Versions.nip76API1
+        });
+        const cryptoKey = new HDKey({
+            publicKey: pointer.cryptoKey,
+            chainCode: pointer.cryptoChain || new Uint8Array(32),
+            version: Versions.nip76API1
+        });
+        const channel = new HDKIndex(indexType, signingKey, cryptoKey);
+        return channel;
     }
 }

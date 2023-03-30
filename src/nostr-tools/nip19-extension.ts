@@ -78,7 +78,7 @@ export enum PointerType {
 
 export type PrivateChannelPointer = {
     type: PointerType;
-    // ownerPubKey: string;
+    docIndex: number;
     signingKey?: Uint8Array;
     cryptoKey?: Uint8Array;
     signingChain?: Uint8Array;
@@ -93,21 +93,24 @@ const keyFromSecretString = (secret: string) => {
 const keyFromSharedSecret = (pubkey: Uint8Array, privkey: Uint8Array) => {
     const pubkeyPoint = secp256k1.Point.fromHex(pubkey);
     const sharedKey = secp256k1.getSharedSecret(privkey, pubkeyPoint).slice(1);
+    console.log({pubkey, privkey, sharedKey, pubOfPriv: secp256k1.getPublicKey(privkey, true).slice(1) })
     return sharedKey;
 };
 
-export async function nprivateChannelEncode(tp: PrivateChannelPointer, secret: string | Uint8Array[]): Promise<string> {
+export async function nprivateChannelEncode(tp: PrivateChannelPointer, secretOrPrivateKey: string, publicKey?: string): Promise<string> {
     let cryptKey: Uint8Array;
-    if (typeof (secret) === 'string') {
-        cryptKey = keyFromSecretString(secret);
-        tp.type |= PointerType.Password;
-    } else if (secret instanceof Array) {
-        cryptKey = keyFromSharedSecret(secret[0], secret[1]);
+    if (publicKey) {
+        const keyPriv = hexToBytes(secretOrPrivateKey);
+        const keyPub = hexToBytes(publicKey);
+        cryptKey = keyFromSharedSecret(keyPub, keyPriv);
+        tp.type |= PointerType.SharedSecret;
+    } else if (secretOrPrivateKey) {
+        cryptKey = keyFromSecretString(secretOrPrivateKey);
         tp.type |= PointerType.Password;
     } else {
         throw new Error('Channel Pointers need a secret password or a public private key pair.')
     }
-    let data = new Uint8Array();
+    let data = Uint8Array.from([tp.docIndex]);
     if (tp.signingKey) {
         data = concatBytes(data, tp.signingKey);
         tp.type |= PointerType.HasSignKey;
@@ -129,31 +132,41 @@ export async function nprivateChannelEncode(tp: PrivateChannelPointer, secret: s
     });
     data = concatBytes(data, relayData);
 
-    const encrypted = concatBytes(Uint8Array.from([tp.type]), await encrypt(data, cryptKey));
-    const words = bech32.toWords(encrypted);
+    let leadBytes = Uint8Array.from([tp.type]);
+    if ((tp.type & PointerType.SharedSecret) === PointerType.SharedSecret) {
+        const keyPub = secp256k1.getPublicKey(secretOrPrivateKey, true).slice(1);
+        leadBytes = concatBytes(leadBytes, keyPub);
+    }
+    const encrypted = await encrypt(data, cryptKey);
+    const words = bech32.toWords(concatBytes(leadBytes, encrypted));
     return bech32.encode('nprivatechan', words, Bech32MaxSize)
 }
 
-export async function decode(nip19: string, secret: string | Uint8Array[]): Promise<{
+export async function decode(nip19: string, secretOrPrivateKey: string): Promise<{
     type: string
     data: PrivateChannelPointer | string
 }> {
     const { prefix, words } = bech32.decode(nip19, Bech32MaxSize);
     if (prefix === 'nprivatechan') {
         let cryptKey: Uint8Array;
-        if (typeof (secret) === 'string') {
-            cryptKey = keyFromSecretString(secret);
+        let data: Uint8Array | undefined;
+        const bytes = bech32.fromWords(words);
+        const pointerType = bytes[0] as PointerType;
+        if ((pointerType & PointerType.SharedSecret) == PointerType.SharedSecret) {
+            const publicKey = bytes.slice(1, 33);
+            cryptKey = keyFromSharedSecret(publicKey, hexToBytes(secretOrPrivateKey));
+            data = await decrypt(bytes.slice(33), cryptKey);
         } else {
-            cryptKey = keyFromSharedSecret(secret[0], secret[1]);
+            cryptKey = keyFromSecretString(secretOrPrivateKey);
+            data = await decrypt(bytes.slice(1), cryptKey);
         }
-        let encrypted = Uint8Array.from(bech32.fromWords(words));
-        let data = await decrypt(encrypted, cryptKey);
+
         if (!data) throw new Error('invalid decryption for nprivatechan');
         let signingKey: Uint8Array | undefined;
         let cryptoKey: Uint8Array | undefined;
         let signingChain: Uint8Array | undefined;
         let cryptoChain: Uint8Array | undefined;
-        const pointerType = data.slice(0, 1) as any as PointerType;
+        let docIndex = data[0];
         let start = 1;
         if ((pointerType & PointerType.HasSignKey) === PointerType.HasSignKey) {
             signingKey = data.slice(start, start + 33);
@@ -176,6 +189,7 @@ export async function decode(nip19: string, secret: string | Uint8Array[]): Prom
             type: 'nprivatechan',
             data: {
                 type: pointerType,
+                docIndex,
                 signingKey,
                 cryptoKey,
                 signingChain,
