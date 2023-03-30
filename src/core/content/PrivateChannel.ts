@@ -5,6 +5,7 @@ import { HDKey, HDKIndex, HDKIndexType, Versions } from '../keys';
 import { ContentDocument, ContentTemplate } from './ContentDocument';
 import { Invitation } from './Invitation';
 import { PostDocument } from './PostDocument';
+import { Rsvp } from './Rsvp';
 
 export interface IChannelPayload extends ContentTemplate {
 
@@ -47,14 +48,16 @@ export class PrivateChannel extends ContentDocument {
     }
 
     get invites(): Invitation[] {
-        return (this.dkxInvite.documents as Invitation[]).map(invite => {
-            invite.rsvps = this.rsvps.filter(x => x.content.docIndex === invite.docIndex)
+        const foo = (this.dkxInvite.documents as Invitation[]).map(invite => {
+            invite.rsvps = this.rsvps.filter(x => x.content.pointerDocIndex === invite.docIndex);
             return invite;
         });
+        // console.log(foo)
+        return foo;
     }
 
-    get rsvps(): Invitation[] {
-        return this.dkxRsvp.documents as Invitation[];
+    get rsvps(): Rsvp[] {
+        return this.dkxRsvp.documents as Rsvp[];
     }
 
     override get payload(): any[] {

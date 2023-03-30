@@ -4,4 +4,5 @@ export * from './PostDocument';
 export * from './FollowDocument';
 export * from './PrivateChannel';
 export * from './Invitation';
+export * from './Rsvp';
 

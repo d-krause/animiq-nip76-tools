@@ -5,7 +5,7 @@ import { concatBytes, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { base64 } from '@scure/base';
 import * as nostrTools from 'nostr-tools';
 import { PointerType, PrivateChannelPointer } from '../../nostr-tools/nip19-extension';
-import { ContentDocument, FollowDocument, Invitation, NostrEventDocument, PostDocument, PrivateChannel } from '../content';
+import { ContentDocument, FollowDocument, Invitation, NostrEventDocument, PostDocument, PrivateChannel, Rsvp } from '../content';
 import { getCreatedAtIndexes, getReducedKey } from '../util';
 import { HDKey } from './HDKey';
 import { Versions } from './Versions';
@@ -156,7 +156,7 @@ export class HDKIndex {
             const json = new TextDecoder().decode(decrypted);
             return this.getDocumentFromJson(json, event, keyset, docIndex);
         } catch (e) {
-            if (event.created_at > 1679660971)
+            if (event.created_at > 1680204477)
                 console.error('HDKIndex.readEvent error', event);
             return undefined;
         }
@@ -177,6 +177,9 @@ export class HDKIndex {
                 break;
             case 1776:
                 doc = new Invitation();
+                break;
+            case 1777:
+                doc = new Rsvp();
                 break;
             case nostrTools.Kind.Contacts:
                 doc = new FollowDocument();

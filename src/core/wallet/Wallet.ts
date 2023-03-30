@@ -1,9 +1,9 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
 
 import { sha512 } from '@noble/hashes/sha512';
-import { hexToBytes } from '@noble/hashes/utils';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import * as nostrTools from 'nostr-tools';
-import { Invitation, NostrEventDocument, PrivateChannel } from '../content';
+import { Invitation, NostrEventDocument, PrivateChannel, Rsvp } from '../content';
 import { HDKey, HDKIndex, HDKIndexType, Versions } from '../keys';
 import { getReducedKey } from '../util';
 import { IWalletStorage, WalletConstructorArgs } from './interfaces';
@@ -48,9 +48,9 @@ export class Wallet {
         return (this.documentsIndex.documents as PrivateChannel[]).filter(x => x.content.kind === nostrTools.Kind.ChannelMetadata);
     }
 
-    get rsvps(): Invitation[] {
-        return (this.documentsIndex.documents as Invitation[]).filter(x => x.content.kind === 1776).map(x => {
-            x.channel = this.channels.find(c => c.dkxPost.signingParent.nostrPubKey === x.content.signingParent?.nostrPubKey)!;
+    get rsvps(): Rsvp[] {
+        return (this.documentsIndex.documents as Rsvp[]).filter(x => x.content.kind === 1777).map(x => {
+            x.channel = this.channels.find(c => c.invitation?.pointer === x.pointer)!;
             return x;
         }).filter(x => !!x.channel);
     }
