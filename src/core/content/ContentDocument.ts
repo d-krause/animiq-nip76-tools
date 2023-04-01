@@ -3,6 +3,13 @@ import * as nostrTools from 'nostr-tools';
 import { HDKIndex } from '../keys';
 
 
+enum MoreNostrKinds {
+    PrivateChannelInvitation = 1776,
+    PrivateChannelRSVP = 1777
+}
+
+export const NostrKinds = { ...nostrTools.Kind, ...MoreNostrKinds };
+
 export interface ContentTemplate {
     kind: nostrTools.Kind | number;
     pubkey: string;

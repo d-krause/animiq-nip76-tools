@@ -30,16 +30,14 @@ export class PrivateChannel extends ContentDocument {
             signingKey.deriveChildKey(0).deriveChildKey(0),
             cryptoKey.deriveChildKey(0).deriveChildKey(0)
         );
-        if (signingKey.privateKey) {
+        if (signingKey.privateKey && cryptoKey.privateKey) {
             this.dkxInvite = new HDKIndex(HDKIndexType.Sequential | HDKIndexType.Private, signingKey, cryptoKey);
         }
         if (existing) {
             // we just reloaded after editing, keeping the same documents arrays
             this.dkxPost.documents = existing.dkxPost.documents;
             this.dkxRsvp.documents = existing.dkxRsvp.documents;
-            if (this.dkxInvite && existing.dkxInvite) {
-                this.dkxInvite.documents = existing.dkxInvite.documents;
-            }
+            this.dkxInvite = existing.dkxInvite;
         }
     }
 

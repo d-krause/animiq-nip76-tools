@@ -5,7 +5,7 @@ import { concatBytes, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { base64 } from '@scure/base';
 import * as nostrTools from 'nostr-tools';
 import { PointerType, PrivateChannelPointer } from '../../nostr-tools/nip19-extension';
-import { ContentDocument, FollowDocument, Invitation, NostrEventDocument, PostDocument, PrivateChannel, Rsvp } from '../content';
+import { ContentDocument, FollowDocument, Invitation, NostrEventDocument, NostrKinds, PostDocument, PrivateChannel, Rsvp } from '../content';
 import { getCreatedAtIndexes, getReducedKey } from '../util';
 import { HDKey } from './HDKey';
 import { Versions } from './Versions';
@@ -97,10 +97,9 @@ export class HDKIndex {
         event.created_at = cati.created_at;
         event.kind = nostrTools.Kind.EventDeletion;
         event.pubkey = keyset.signingKey!.nostrPubKey;
-        // event.content = undefined;
+        event.content = 'delete';
         event.sig = nostrTools.signEvent(event, keyset.signingKey!.hexPrivKey!) as any;
         event.id = nostrTools.getEventHash(event);
-        doc.nostrEvent = event;
 
         return event;
     }
@@ -155,9 +154,9 @@ export class HDKIndex {
             const decrypted = new Uint8Array(await globalThis.crypto.subtle.decrypt(alg, secretKey, data));
             const json = new TextDecoder().decode(decrypted);
             return this.getDocumentFromJson(json, event, keyset, docIndex);
-        } catch (e) {
+        } catch (error) {
             if (event.created_at > 1680204477)
-                console.error('HDKIndex.readEvent error', event);
+                console.error('HDKIndex.readEvent error', { error, event });
             return undefined;
         }
     }
@@ -168,21 +167,18 @@ export class HDKIndex {
         let existing = this.documents.find(x => x.nostrEvent?.pubkey === event.pubkey);
         const kind = parseInt(json.match(/\d+/)![0]);
         switch (kind) {
-            case nostrTools.Kind.ChannelMetadata:
+            case NostrKinds.ChannelMetadata:
                 doc = new PrivateChannel(keyset.signingKey!, keyset.cryptoKey, existing as PrivateChannel);
                 break;
-            case nostrTools.Kind.Text:
-            case nostrTools.Kind.Reaction:
+            case NostrKinds.Text:
+            case NostrKinds.Reaction:
                 doc = new PostDocument();
                 break;
-            case 1776:
+            case NostrKinds.PrivateChannelInvitation:
                 doc = new Invitation();
                 break;
-            case 1777:
+            case NostrKinds.PrivateChannelRSVP:
                 doc = new Rsvp();
-                break;
-            case nostrTools.Kind.Contacts:
-                doc = new FollowDocument();
                 break;
             default:
                 throw new Error(`Kind ${kind} not supported.`)
