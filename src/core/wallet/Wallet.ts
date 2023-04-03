@@ -5,7 +5,7 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import * as nostrTools from 'nostr-tools';
 import { Invitation, NostrEventDocument, NostrKinds, PrivateChannel, Rsvp } from '../content';
 import { HDKey, HDKIndex, HDKIndexType, Versions } from '../keys';
-import { getReducedKey } from '../util';
+import { getCreatedAtIndexes, getNowSeconds, getReducedKey } from '../util';
 import { IWalletStorage, WalletConstructorArgs } from './interfaces';
 
 export const walletRsvpDocumentsOffset = 0x10000000;
@@ -120,8 +120,9 @@ export class Wallet {
             kind: nostrTools.Kind.ChannelMetadata,
             name: 'New Channel ' + index,
             pubkey: this.ownerPubKey,
+            created_at: getNowSeconds()
         };
-        this.documentsIndex.documents.push(channel);
+        this.documentsIndex.documents = [channel, ...this.documentsIndex.documents];
         return channel;
     }
 }

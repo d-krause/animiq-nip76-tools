@@ -2,6 +2,7 @@
 import * as nostrTools from 'nostr-tools';
 import { nprivateChannelEncode, PrivateChannelPointer } from '../../nostr-tools/nip19-extension';
 import { HDKey, HDKIndex, HDKIndexType, Versions } from '../keys';
+import { getCreatedAtIndexes } from '../util';
 import { ContentDocument, ContentTemplate } from './ContentDocument';
 import { Invitation } from './Invitation';
 import { PostDocument } from './PostDocument';
@@ -12,7 +13,7 @@ export interface IChannelPayload extends ContentTemplate {
     name?: string;
     about?: string;
     picture?: string;
-    relays?: string[];
+    created_at: number;
 }
 
 export class PrivateChannel extends ContentDocument {
@@ -46,12 +47,11 @@ export class PrivateChannel extends ContentDocument {
     }
 
     get invites(): Invitation[] {
-        const foo = (this.dkxInvite.documents as Invitation[]).map(invite => {
+        const invitesWithRsvps = (this.dkxInvite.documents as Invitation[]).map(invite => {
             invite.rsvps = this.rsvps.filter(x => x.content.pointerDocIndex === invite.docIndex);
             return invite;
         });
-        // console.log(foo)
-        return foo;
+        return invitesWithRsvps;
     }
 
     get rsvps(): Rsvp[] {
@@ -65,7 +65,7 @@ export class PrivateChannel extends ContentDocument {
                 this.content.name,
                 this.content.about,
                 this.content.picture,
-                this.content.relays
+                this.content.created_at
             ]
         ];
     }
@@ -75,7 +75,7 @@ export class PrivateChannel extends ContentDocument {
         this.content.name = raw[1][0];
         this.content.about = raw[1][1];
         this.content.picture = raw[1][2];
-        this.content.relays = raw[1][3];
+        this.content.created_at = raw[1][3];
         return raw;
     }
 }
