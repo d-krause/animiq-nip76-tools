@@ -30,14 +30,24 @@ export class Wallet {
         this.isGuest = args.isGuest
         this.isInSession = args.isInSession
         if (this.isGuest) {
-            this.reKey(args.privateKey!);
+            const randoms = new Uint8Array(256);
+            window.crypto.getRandomValues(randoms);
+            this.master = HDKey.parseMasterSeed(randoms, Versions.nip76API1);
+            this.root = this.master.derive(`m/44'/1237'/0'/1776'`);
+            if (args.privateKey) {
+                this.setLockWords({ secret: args.privateKey! });
+            }
         } else if (this.master) {
             this.root = this.master.derive(`m/44'/1237'/0'/1776'`);
-            this.setLockWords({ secret: args.privateKey, lockwords: args.wordset });
-            if (!this.isInSession) {
-                this.store.save({ publicKey: this.ownerPubKey, key: this.master, wordset: this.wordset });
-                this.isInSession = true;
+            if (args.privateKey || args.wordset) {
+                this.setLockWords({ secret: args.privateKey, lockwords: args.wordset });
             }
+        }
+        if (!this.isInSession && this.wordset) {
+            this.store.save({ publicKey: this.ownerPubKey, key: this.master, wordset: this.wordset });
+            this.isInSession = true;
+        }
+        if (this.wordset) {
             const key1 = getReducedKey({ root: this.root, wordset: this.wordset.slice(0, 4) });
             const key2 = getReducedKey({ root: this.root, wordset: this.wordset.slice(4, 8) });
             this.documentsIndex = new HDKIndex(HDKIndexType.Sequential | HDKIndexType.Private, key1, key2, this.wordset.slice(8));
@@ -61,6 +71,7 @@ export class Wallet {
         }
         await this.store.save({ publicKey: this.ownerPubKey, key: this.master, wordset: this.wordset });
         this.isInSession = true;
+        this.isGuest = false;
     }
 
     async clearSession() {
@@ -71,18 +82,6 @@ export class Wallet {
         this.master = HDKey.parseMasterSeed(randoms, Versions.nip76API1);
         this.setLockWords({ secret: ' ' });
         this.documentsIndex.documents = [];
-    }
-
-    reKey(secret: string): void {
-        if (!this.isGuest) {
-            throw new Error('Existing Wallet cannot be rekeyed.');
-        }
-        const randoms = new Uint8Array(256);
-        window.crypto.getRandomValues(randoms);
-        this.master = HDKey.parseMasterSeed(randoms, Versions.nip76API1);
-        if (secret) {
-            this.setLockWords({ secret });
-        }
     }
 
     restoreFromKey(extendedPrivateKey: string, secret: string): boolean {
