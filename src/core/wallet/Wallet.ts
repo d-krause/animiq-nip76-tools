@@ -30,7 +30,7 @@ export class Wallet {
         this.isGuest = args.isGuest
         this.isInSession = args.isInSession
         if (this.isGuest) {
-            this.reKey();
+            this.reKey(args.privateKey!);
         } else if (this.master) {
             this.root = this.master.derive(`m/44'/1237'/0'/1776'`);
             this.setLockWords({ secret: args.privateKey, lockwords: args.wordset });
@@ -73,7 +73,7 @@ export class Wallet {
         this.documentsIndex.documents = [];
     }
 
-    reKey(secret?: string): void {
+    reKey(secret: string): void {
         if (!this.isGuest) {
             throw new Error('Existing Wallet cannot be rekeyed.');
         }
@@ -83,7 +83,6 @@ export class Wallet {
         if (secret) {
             this.setLockWords({ secret });
         }
-        this.documentsIndex.documents = [];
     }
 
     restoreFromKey(extendedPrivateKey: string, secret: string): boolean {
