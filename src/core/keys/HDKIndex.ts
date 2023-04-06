@@ -5,7 +5,7 @@ import { concatBytes, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { base64 } from '@scure/base';
 import * as nostrTools from 'nostr-tools';
 import { PointerType, PrivateChannelPointer } from '../../nostr-tools/nip19-extension';
-import { ContentDocument, FollowDocument, Invitation, NostrEventDocument, NostrKinds, PostDocument, PrivateChannel, Rsvp } from '../content';
+import { ContentDocument, Invitation, NostrEventDocument, NostrKinds, PostDocument, PrivateChannel, Rsvp } from '../content';
 import { getCreatedAtIndexes, getReducedKey } from '../util';
 import { HDKey } from './HDKey';
 import { Versions } from './Versions';
