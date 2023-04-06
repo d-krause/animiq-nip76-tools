@@ -14,6 +14,7 @@ const distPackageJson = JSON.stringify(
     "description": srcPackageJson.description,
     "author": srcPackageJson.author,
     "license": srcPackageJson.license,
+    "repository": srcPackageJson.repository,
     "main": "bundle.js",
     "module": "bundle.js",
     "typings": "src/index.d.ts",
@@ -21,6 +22,7 @@ const distPackageJson = JSON.stringify(
   }, null, '\t'
 );
 fs.writeFileSync(`${__dirname}/dist/package.json`, distPackageJson, 'utf8');
+fs.writeFileSync(`${__dirname}/dist/README.md`, distPackageJson, 'utf8');
 
 const config = {
   entry: "./src/index.ts",
