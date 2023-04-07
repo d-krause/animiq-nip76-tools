@@ -2,8 +2,8 @@
 Tools for developing Private Channels [Nostr](https://github.com/fiatjaf/nostr) clients. Depends on [_@scure_](https://github.com/paulmillr/scure-base), [_@noble_](https://github.com/paulmillr/noble-hashes) & [_nostr-tools_](https://github.com/nbd-wtf/nostr-tools) packages.  If [NIP-76 Pull Request](https://github.com/nostr-protocol/nips/pull/413) is accepted, we will rename this package to "_nip76-tools_".
 
 ## Overview
-- Each Private Channel message is encrypted with a unique key, signed with a unique key, and reveals no identifying information about the author or the reader.
-- Events are verified through channel chainCode key derivation.
+- Each Private Channel message is encrypted with a unique key, signed with another unique key, and reveals no identifying information about the author or the intended recipient.
+- Event signatures are verified through channel chainCode key derivation.
 - Channel Keys are exchanged via event pointer strings, also ecrypted, which keys to a single nostrEvent called an _Invitation_.
 
 ## Installation
@@ -26,7 +26,7 @@ let sk = generatePrivateKey() // `sk` is a hex string
 let pk = getPublicKey(sk) // `pk` is a hex string
 
 const wallet = await Nip76WebWalletStorage.fromStorage({ ps, sk });
-wallet.saveWallet(sk);
+await wallet.saveWallet(sk);
 ```
 
 ### Creating New Private Channels
