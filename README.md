@@ -4,7 +4,7 @@ Tools for developing Private Channels [Nostr](https://github.com/fiatjaf/nostr) 
 ## Overview
 - Each Private Channel message is encrypted with a unique key, signed with another unique key, and reveals no identifying information about the author or the intended recipient.
 - Event signatures are verified through channel chainCode key derivation.
-- Channel Keys are exchanged via event pointer strings, also ecrypted, which keys to a single nostrEvent called an _Invitation_.
+- Channel Keys are exchanged via event pointer strings, encrypted (by password or computed secret), which are the keys to a single nostrEvent called an _Invitation_.
 
 ## Installation
 
