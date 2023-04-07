@@ -1,4 +1,14 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
+/*
+This file was started in 2019 based on https://github.com/petejkim/wallet.ts/blob/651c7676199b2abc52722fb93f75743ee273b484/src/HDKey/index.ts
+ISC License (ISC)
+Copyright © 2018-2020 Coinbase, Inc.
+Copyright © 2017-2018 HardFork Inc.
+
+It was later revisited and refactored in 2023 based on https://github.com/paulmillr/scure-bip32/blob/d8d29a7e08884b1b0ac8175b119cdedbdc137724/index.ts
+The MIT License (MIT)
+Copyright (c) 2022 Patricio Palladino, Paul Miller (paulmillr.com)
+*/
 import { hmac } from '@noble/hashes/hmac';
 import { ripemd160 } from '@noble/hashes/ripemd160';
 import { sha256 } from '@noble/hashes/sha256';

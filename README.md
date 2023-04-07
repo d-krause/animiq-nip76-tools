@@ -1,12 +1,10 @@
 # animiq-nip76-tools
-Tools for developing Private Channels [Nostr](https://github.com/fiatjaf/nostr) clients.
+Tools for developing Private Channels [Nostr](https://github.com/fiatjaf/nostr) clients. Depends on [_@scure_](https://github.com/paulmillr/scure-base), [_@noble_](https://github.com/paulmillr/noble-hashes) & [_nostr-tools_](https://github.com/nbd-wtf/nostr-tools) packages.  If [NIP-76 Pull Request](https://github.com/nostr-protocol/nips/pull/413) is accepted, we will rename this package to "_nip76-tools_".
 
-If [NIP-76 Pull Request](https://github.com/nostr-protocol/nips/pull/413) is accepted, we will rename this package to "_nip76-tools_".
-
-
-Depends on _@scure_, _@noble_ & _nostr-tools_ packages.
-
-
+## Overview
+- Each Private Channel message is encrypted with a unique key, signed with a unique key, and reveals no identifying information about the author or the reader.
+- Events are verified through channel chainCode key derivation.
+- Channel Keys are exchanged via event pointer strings, also ecrypted, which keys to a single nostrEvent called an _Invitation_.
 
 ## Installation
 
@@ -39,7 +37,7 @@ let privateKey = await someMethodToGetTheProfilePrivateKey();
 let channel = wallet.createChannel();
 channel.content.name = 'My New Channel';
 channel.content.about = 'Whatever we want';
-const event = await wallet.documentsIndex.createEvent(channel, privateKey);
+let event = await wallet.documentsIndex.createEvent(channel, privateKey);
 
 someMethodToSendTheEventToRelays(event);
 
@@ -135,9 +133,9 @@ let pointer = await nip19Extension.decode(channelPointer, 'privateKeyHexOrPasswo
 
 if ((pointer.type & nip19Extension.PointerType.FullKeySet) === nip19Extension.PointerType.FullKeySet) {
     // Unmanaged Invitation
-    const signingParent = new HDKey({ publicKey: pointer.signingKey, chainCode: pointer.signingChain, version: Versions.nip76API1 });
-    const cryptoParent = new HDKey({ publicKey: pointer.cryptoKey, chainCode: pointer.cryptoChain, version: Versions.nip76API1 });
-    const invite = new Invitation();
+    let signingParent = new HDKey({ publicKey: pointer.signingKey, chainCode: pointer.signingChain, version: Versions.nip76API1 });
+    let cryptoParent = new HDKey({ publicKey: pointer.cryptoKey, chainCode: pointer.cryptoChain, version: Versions.nip76API1 });
+    let invite = new Invitation();
     pointer.docIndex = -1;
     invite.pointer = pointer;
     invite.content = {
@@ -155,7 +153,7 @@ if ((pointer.type & nip19Extension.PointerType.FullKeySet) === nip19Extension.Po
     // the nostrEvent returned is the channel
 } else {
     // Managed Invitation
-    const inviteIndex = HDKIndex.fromChannelPointer(pointer);
+    let inviteIndex = HDKIndex.fromChannelPointer(pointer);
     relayService.subscribe(
       [{ authors: [inviteIndex.signingParent.nostrPubKey], kinds: [17761], limit: 1 }]
     );
