@@ -25,7 +25,8 @@ export class Wallet {
 
     constructor(args: WalletConstructorArgs) {
         this.ownerPubKey = args.publicKey;
-        this.master = args.key!;
+        this.master = args.masterKey!;
+        this.root = args.rootKey!;
         this.store = args.store;
         this.isGuest = args.isGuest
         this.isInSession = args.isInSession
@@ -37,14 +38,16 @@ export class Wallet {
             if (args.privateKey) {
                 this.setLockWords({ secret: args.privateKey! });
             }
-        } else if (this.master) {
-            this.root = this.master.derive(`m/44'/1237'/0'/1776'`);
+        } else if(this.master || this.root){
+            if (this.master) {
+                this.root = this.master.derive(`m/44'/1237'/0'/1776'`);
+            }
             if (args.privateKey || args.wordset) {
-                this.setLockWords({ secret: args.privateKey, lockwords: args.wordset });
+                this.setLockWords({ secret: args.privateKey, wordset: args.wordset });
             }
         }
         if (!this.isInSession && this.wordset) {
-            this.store.save({ publicKey: this.ownerPubKey, key: this.master, wordset: this.wordset });
+            this.store.save({ publicKey: this.ownerPubKey, masterKey: this.master, wordset: this.wordset });
             this.isInSession = true;
         }
         if (this.wordset) {
@@ -67,9 +70,9 @@ export class Wallet {
 
     async saveWallet(privateKey?: string) {
         if (privateKey) {
-            await this.store.save({ privateKey, publicKey: this.ownerPubKey, key: this.master, wordset: this.wordset });
+            await this.store.save({ privateKey, publicKey: this.ownerPubKey, masterKey: this.master, wordset: this.wordset });
         }
-        await this.store.save({ publicKey: this.ownerPubKey, key: this.master, wordset: this.wordset });
+        await this.store.save({ publicKey: this.ownerPubKey, masterKey: this.master, wordset: this.wordset });
         this.isInSession = true;
         this.isGuest = false;
     }
@@ -91,26 +94,27 @@ export class Wallet {
         return true;
     }
 
-    setLockWords(args: { secret?: string, lockwords?: Uint32Array }) {
+    setLockWords(args: { secret?: string, wordset?: Uint32Array }) {
         if (args.secret) {
             const secretHash = args.secret.match(/^[a-f0-9]$/) && args.secret.length % 2 === 0
                 ? sha512(hexToBytes(args.secret))
                 : sha512(new TextEncoder().encode(args.secret));
             this.wordset = new Uint32Array((secretHash).buffer);
-        } else if (args.lockwords && args.lockwords.length === 16) {
-            this.wordset = args.lockwords;
+        } else if (args.wordset && args.wordset.length === 16) {
+            this.wordset = args.wordset;
         } else {
             throw new Error('16 lockwords or a secret to generate them is required to setLockwords().');
         }
     }
 
     createChannel(): PrivateChannel {
-        if (!this.wordset || !this.master || !this.root) {
-            throw new Error('locknums and master needed before getChannel().');
+        if (!this.wordset || !this.root) {
+            throw new Error('wordset and root key needed before createChannel().');
         }
         const index = this.channels.filter(x => x.ownerPubKey === this.ownerPubKey).length + 1;
         const keyset = this.documentsIndex.getKeysFromIndex(index);
-        const channel = new PrivateChannel(keyset.signingKey!, keyset.cryptoKey);
+        const channel = new PrivateChannel();
+        channel.setIndexKeys(keyset.signingKey!, keyset.encryptKey);
         channel.nostrEvent = { pubkey: keyset.signingKey!.nostrPubKey } as NostrEventDocument;
         channel.docIndex = index;
         channel.ownerPubKey = this.ownerPubKey;

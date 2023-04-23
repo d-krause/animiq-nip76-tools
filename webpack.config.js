@@ -25,6 +25,8 @@ fs.writeFileSync(`${__dirname}/dist/package.json`, distPackageJson, 'utf8');
 fs.writeFileSync(`${__dirname}/dist/README.md`, distPackageJson, 'utf8');
 
 const config = {
+  mode: 'development',
+  devtool: 'inline-source-map',
   entry: "./src/index.ts",
   output: {
     path: path.resolve(__dirname, "dist"),

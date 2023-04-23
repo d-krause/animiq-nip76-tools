@@ -12,7 +12,7 @@ export interface IInvitationPayload extends ContentTemplate {
     password?: string;
     docIndex: number;
     signingParent?: HDKey;
-    cryptoParent?: HDKey;
+    encryptParent?: HDKey;
 }
 
 export class Invitation extends ContentDocument {
@@ -29,7 +29,7 @@ export class Invitation extends ContentDocument {
                 this.content.for,
                 this.content.password,
                 this.content.signingParent?.extendedPublicKey,
-                this.content.cryptoParent?.extendedPublicKey,
+                this.content.encryptParent?.extendedPublicKey,
                 this.content.docIndex
             ]
         ];
@@ -39,7 +39,7 @@ export class Invitation extends ContentDocument {
         this.content.for = raw[1][0];
         this.content.password = raw[1][1];
         this.content.signingParent = raw[1][2] ? HDKey.parseExtendedKey(raw[1][2]) : undefined;
-        this.content.cryptoParent = raw[1][3] ? HDKey.parseExtendedKey(raw[1][3]) : undefined;
+        this.content.encryptParent = raw[1][3] ? HDKey.parseExtendedKey(raw[1][3]) : undefined;
         this.content.docIndex = raw[1][4];
         return raw;
     }
@@ -50,14 +50,14 @@ export class Invitation extends ContentDocument {
                 type: 0,
                 docIndex: this.docIndex,
                 signingKey: keyset.signingKey!.publicKey,
-                cryptoKey: keyset.cryptoKey.publicKey,
+                cryptoKey: keyset.encryptKey.publicKey,
             }, bytesToHex(this.dkxParent.signingParent.privateKey), this.content.for);
         } else {
             return nprivateChannelEncode({
                 type: 0,
                 docIndex: this.docIndex,
                 signingKey: keyset.signingKey!.publicKey,
-                cryptoKey: keyset.cryptoKey.publicKey,
+                cryptoKey: keyset.encryptKey.publicKey,
             }, this.content.password!);
         }
     }

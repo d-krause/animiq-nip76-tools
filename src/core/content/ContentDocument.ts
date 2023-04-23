@@ -26,14 +26,14 @@ export interface NostrEventDocument extends nostrTools.Event {
 }
 
 export class ContentDocument {
-    dkxParent!: HDKIndex;
+    content!: ContentTemplate;
     docIndex!: number;
+    ownerPubKey!: string;
+    dkxParent!: HDKIndex;
+    nostrEvent!: NostrEventDocument;
     ready = false;
     verified = false;
     editing = false;
-    content!: ContentTemplate;
-    nostrEvent!: NostrEventDocument;
-    ownerPubKey!: string;
 
     get payload(): any[] {
         return [[

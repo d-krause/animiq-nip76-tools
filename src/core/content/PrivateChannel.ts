@@ -18,13 +18,12 @@ export interface IChannelPayload extends ContentTemplate {
 
 export class PrivateChannel extends ContentDocument {
     override content!: IChannelPayload;
-    dkxPost: HDKIndex;
-    dkxRsvp: HDKIndex;
+    dkxPost!: HDKIndex;
+    dkxRsvp!: HDKIndex;
     dkxInvite!: HDKIndex;
     invitation!: Invitation;
 
-    constructor(signingKey: HDKey, cryptoKey: HDKey, existing?: PrivateChannel) {
-        super();
+    setIndexKeys(signingKey: HDKey, cryptoKey: HDKey, existing?: PrivateChannel) {
         this.dkxPost = new HDKIndex(HDKIndexType.TimeBased, signingKey, cryptoKey);
         this.dkxRsvp = new HDKIndex(
             HDKIndexType.TimeBased,

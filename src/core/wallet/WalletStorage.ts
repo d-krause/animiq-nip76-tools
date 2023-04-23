@@ -33,7 +33,7 @@ export class WebWalletStorage implements IWalletStorage {
 
     async save(args: WalletStorageArgs): Promise<boolean> {
         const isSession = !args.privateKey && !!WebWalletStorage.sessionExpireMinutes;
-        if (!args.key || (isSession && !args.key && !args.wordset)) {
+        if (!args.masterKey || (isSession && !args.masterKey && !args.wordset)) {
             throw new Error('HD privateKey key needed for WebWalletStorage.save(). lockwords required for sessions.');
         }
         if (isSession && !WebWalletStorage.sessionExpireMinutes) {
@@ -41,7 +41,7 @@ export class WebWalletStorage implements IWalletStorage {
         }
         let storeSecret = isSession ? hexToBytes(this.createSession()) : sha256(hexToBytes(args.privateKey!));
         if (storeSecret) {
-            const keyBuffer = concatBytes(args.key.chainCode, args.key.privateKey);
+            const keyBuffer = concatBytes(args.masterKey.chainCode, args.masterKey.privateKey);
             const cryptoBuffer = isSession
                 ? concatBytes(keyBuffer, new Uint8Array(args.wordset!.buffer))
                 : keyBuffer;
@@ -94,7 +94,7 @@ export class WebWalletStorage implements IWalletStorage {
                     const alg = { name: 'AES-GCM', iv: iv, length: 256 } as AesKeyAlgorithm;
                     const secretKey = await window.crypto.subtle.importKey('raw', storeSecret, alg, false, ['decrypt']);
                     const decrypted = new Uint8Array(await window.crypto.subtle.decrypt(alg, secretKey, data));
-                    rtn.key = new HDKey({
+                    rtn.masterKey = new HDKey({
                         chainCode: decrypted.slice(0, 32),
                         privateKey: decrypted.slice(32, 64),
                         version: Versions.nip76API1

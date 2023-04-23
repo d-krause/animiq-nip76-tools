@@ -76,6 +76,17 @@ export enum PointerType {
     FullKeySet = (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5),    // 0011 1100
 }
 
+const keyFromSecretString = (secret: string) => {
+    return hmac.create(sha256, new Uint8Array(utf8ToBytes('nip76'))).update(new Uint8Array(utf8ToBytes(secret))).digest();
+};
+
+const keyFromSharedSecret = (pubkey: Uint8Array, privkey: Uint8Array) => {
+    const pubkeyPoint = secp256k1.Point.fromHex(pubkey);
+    const sharedKey = secp256k1.getSharedSecret(privkey, pubkeyPoint).slice(1);
+    console.log({ pubkey, privkey, sharedKey, pubOfPriv: secp256k1.getPublicKey(privkey, true).slice(1) })
+    return sharedKey;
+};
+
 export type PrivateChannelPointer = {
     type: PointerType;
     docIndex: number;
@@ -86,16 +97,39 @@ export type PrivateChannelPointer = {
     relays?: string[]
 }
 
-const keyFromSecretString = (secret: string) => {
-    return hmac.create(sha256, new Uint8Array(utf8ToBytes('nip76'))).update(new Uint8Array(utf8ToBytes(secret))).digest();
-};
+export type PrivateChannelPointerDTO = {
+    type: PointerType;
+    docIndex: number;
+    signingKey?: number[];
+    cryptoKey?: number[];
+    signingChain?: number[];
+    cryptoChain?: number[];
+    relays?: string[]
+}
 
-const keyFromSharedSecret = (pubkey: Uint8Array, privkey: Uint8Array) => {
-    const pubkeyPoint = secp256k1.Point.fromHex(pubkey);
-    const sharedKey = secp256k1.getSharedSecret(privkey, pubkeyPoint).slice(1);
-    console.log({pubkey, privkey, sharedKey, pubOfPriv: secp256k1.getPublicKey(privkey, true).slice(1) })
-    return sharedKey;
-};
+export function pointerToDTO(pointer: PrivateChannelPointer): PrivateChannelPointerDTO {
+    return {
+        type: pointer.type,
+        docIndex: pointer.docIndex,
+        signingKey: pointer.signingKey ? Array.from(pointer.signingKey) : undefined,
+        cryptoKey: pointer.cryptoKey ? Array.from(pointer.cryptoKey) : undefined,
+        signingChain: pointer.signingChain ? Array.from(pointer.signingChain) : undefined,
+        cryptoChain: pointer.cryptoChain ? Array.from(pointer.cryptoChain) : undefined,
+        relays: pointer.relays
+    }
+}
+
+export function pointerFromDTO(pointer: PrivateChannelPointerDTO): PrivateChannelPointer {
+    return {
+        type: pointer.type,
+        docIndex: pointer.docIndex,
+        signingKey: pointer.signingKey ? Uint8Array.from(pointer.signingKey) : undefined,
+        cryptoKey: pointer.cryptoKey ? Uint8Array.from(pointer.cryptoKey) : undefined,
+        signingChain: pointer.signingChain ? Uint8Array.from(pointer.signingChain) : undefined,
+        cryptoChain: pointer.cryptoChain ? Uint8Array.from(pointer.cryptoChain) : undefined,
+        relays: pointer.relays
+    }
+}
 
 export async function nprivateChannelEncode(tp: PrivateChannelPointer, secretOrPrivateKey: string, publicKey?: string): Promise<string> {
     let cryptKey: Uint8Array;

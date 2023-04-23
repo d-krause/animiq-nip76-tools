@@ -19,7 +19,7 @@ export enum HDKIndexType {
 
 interface DocumentKeyset {
     signingKey?: HDKey;
-    cryptoKey: HDKey
+    encryptKey: HDKey
 }
 
 
@@ -29,7 +29,7 @@ export class HDKIndex {
     constructor(
         public type: HDKIndexType,
         public signingParent: HDKey,
-        public cryptoParent: HDKey,
+        public encryptParent: HDKey,
         public wordset?: Uint32Array
     ) {
         if (!this.isTimeBased && !this.isSequential && !this.isSingleton) {
@@ -38,7 +38,7 @@ export class HDKIndex {
         if (this.isTimeBased && this.isSequential) {
             throw new Error('HDKIndex cannot be both Sequential and TimeBased.');
         }
-        if (this.isPrivate && !cryptoParent.privateKey) {
+        if (this.isPrivate && !encryptParent.privateKey) {
             throw new Error('privateKey is required on the cryptoParent when the type is Private.');
         }
         if (this.isPrivate && !this.wordset) {
@@ -68,12 +68,12 @@ export class HDKIndex {
         let cryptoKey: HDKey;
         if (this.isSingleton) {
             signingKey = this.signingParent;
-            cryptoKey = this.cryptoParent;
+            cryptoKey = this.encryptParent;
         } else if (this.isPrivate) {
             if (this.signingParent.privateKey) {
                 signingKey = getReducedKey({ root: this.signingParent, offset: docIndex, wordset: this.wordset!.slice(0, 4) });
             }
-            cryptoKey = getReducedKey({ root: this.cryptoParent, offset: docIndex, wordset: this.wordset!.slice(4, 8) });
+            cryptoKey = getReducedKey({ root: this.encryptParent, offset: docIndex, wordset: this.wordset!.slice(4, 8) });
         } else {
             if (privateKey) {
                 signingKey = new HDKey({
@@ -82,10 +82,10 @@ export class HDKIndex {
                     version: this.signingParent.version
                 }).deriveChildKey(docIndex, false);
             }
-            cryptoKey = this.cryptoParent.deriveChildKey(docIndex!, false);
+            cryptoKey = this.encryptParent.deriveChildKey(docIndex!, false);
         }
 
-        return { signingKey, cryptoKey };
+        return { signingKey, encryptKey: cryptoKey };
     }
 
     async createDeleteEvent(doc: ContentDocument, privateKey: string): Promise<NostrEventDocument> {
@@ -117,7 +117,7 @@ export class HDKIndex {
             doc.docIndex = cati.index1;
         }
         const keyset = this.getKeysFromIndex(doc.docIndex, privateKey);
-        const keydata = keyset.cryptoKey.publicKey.slice(1);
+        const keydata = keyset.encryptKey.publicKey.slice(1);
         const content = new TextEncoder().encode(doc.serialize());
         const iv = randomBytes(16);
         const alg = { name: 'AES-GCM', iv, length: 256 } as AesKeyAlgorithm;
@@ -145,7 +145,7 @@ export class HDKIndex {
             const cati = getCreatedAtIndexes(event.created_at);
             const docIndex = this.isTimeBased ? cati.index1 : sequentialIndex!;
             const keyset = this.getKeysFromIndex(docIndex!);
-            const keydata = keyset.cryptoKey.publicKey.slice(1);
+            const keydata = keyset.encryptKey.publicKey.slice(1);
             const encrypted = base64.decode(event.content);
             const iv = encrypted.slice(0, 16);
             const data = encrypted.slice(16);
@@ -162,29 +162,17 @@ export class HDKIndex {
     }
 
     private getDocumentFromJson(json: string, event: NostrEventDocument, keyset: DocumentKeyset, docIndex?: number): ContentDocument {
-
-        let doc: ContentDocument;
-        let existing = this.documents.find(x => x.nostrEvent?.pubkey === event.pubkey);
+        
         const kind = parseInt(json.match(/\d+/)![0]);
-        switch (kind) {
-            case NostrKinds.ChannelMetadata:
-                doc = new PrivateChannel(keyset.signingKey!, keyset.cryptoKey, existing as PrivateChannel);
-                break;
-            case NostrKinds.Text:
-            case NostrKinds.Reaction:
-                doc = new PostDocument();
-                break;
-            case NostrKinds.PrivateChannelInvitation:
-                doc = new Invitation();
-                break;
-            case NostrKinds.PrivateChannelRSVP:
-                doc = new Rsvp();
-                break;
-            default:
-                throw new Error(`Kind ${kind} not supported.`)
+        const doc = HDKIndex.getContentClass(kind);
+        let existing = this.documents.find(x => x.nostrEvent?.pubkey === event.pubkey);
+        
+        if(doc instanceof PrivateChannel) {
+            (doc as PrivateChannel).setIndexKeys(keyset.signingKey!, keyset.encryptKey, existing as PrivateChannel);
         }
 
         doc.deserialize(json);
+
         if (docIndex) {
             const publicKey = !this.isPrivate && doc.content.pubkey ? hexToBytes('02' + doc.content.pubkey) : this.signingParent.publicKey;
             const signerKey = new HDKey({ publicKey, chainCode: this.signingParent.chainCode, version: this.signingParent.version });
@@ -215,6 +203,22 @@ export class HDKIndex {
         }
     }
 
+    toJSON(): { type: HDKIndexType, signingParent: string, encryptParent: string, wordset?: number[] } {
+        return {
+            type: this.type,
+            signingParent: this.signingParent.extendedPrivateKey || this.signingParent.extendedPublicKey,
+            encryptParent: this.encryptParent.extendedPrivateKey || this.encryptParent.extendedPublicKey,
+            wordset: this.wordset ? Array.from(this.wordset) : undefined
+        };
+    }
+
+    static fromJSON(jsonObj: { type: HDKIndexType, signingParent: string, encryptParent: string, wordset?: number[] }) {
+        const signingParent = HDKey.parseExtendedKey(jsonObj.signingParent);
+        const encryptParent = HDKey.parseExtendedKey(jsonObj.encryptParent);
+        const wordset = jsonObj.wordset ? Uint32Array.from(jsonObj.wordset) : undefined;
+        return new HDKIndex(jsonObj.type, signingParent, encryptParent, wordset);
+    }
+
     static fromChannelPointer(pointer: PrivateChannelPointer): HDKIndex {
         if ((pointer.type & PointerType.HasBothKeys) != PointerType.HasBothKeys) {
             throw new Error('Cannot create HDKIndex without both a signing and crypto parent key.')
@@ -234,5 +238,21 @@ export class HDKIndex {
         });
         const channel = new HDKIndex(indexType, signingKey, cryptoKey);
         return channel;
+    }
+
+    static getContentClass(kind: number): ContentDocument {
+        switch (kind) {
+            case NostrKinds.ChannelMetadata:
+                return new PrivateChannel();
+            case NostrKinds.Text:
+            case NostrKinds.Reaction:
+                return new PostDocument();
+            case NostrKinds.PrivateChannelInvitation:
+                return new Invitation();
+            case NostrKinds.PrivateChannelRSVP:
+                return new Rsvp();
+            default:
+                throw new Error(`Kind ${kind} not supported.`)
+        }
     }
 }

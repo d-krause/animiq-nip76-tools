@@ -10,7 +10,8 @@ export interface IWalletStorage {
 export interface WalletStorageArgs {
     publicKey: string;
     privateKey?: string;
-    key?: HDKey;
+    masterKey?: HDKey;
+    rootKey?: HDKey;
     wordset?: Uint32Array;
 }
 
