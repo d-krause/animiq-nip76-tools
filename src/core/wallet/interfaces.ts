@@ -1,5 +1,5 @@
 
-import { HDKey } from '../keys';
+import { HDKey, HDKIndex } from '../keys';
 
 export interface IWalletStorage {
     clearSession(): void;
@@ -11,11 +11,12 @@ export interface WalletStorageArgs {
     publicKey: string;
     privateKey?: string;
     masterKey?: HDKey;
-    rootKey?: HDKey;
     wordset?: Uint32Array;
 }
 
 export interface WalletConstructorArgs extends WalletStorageArgs {
+    rootKey?: HDKey;
+    documentsIndex?: HDKIndex;
     store: IWalletStorage;
     isGuest: boolean;
     isInSession: boolean;

@@ -44,20 +44,20 @@ export class Invitation extends ContentDocument {
         return raw;
     }
     async getPointer(): Promise<string> {
-        const keyset = this.dkxParent.getKeysFromIndex(this.docIndex);
+        const keyset = this.dkxParent.getDocumentKeyset(this.docIndex);
         if (this.content.for) {
             return nprivateChannelEncode({
                 type: 0,
                 docIndex: this.docIndex,
                 signingKey: keyset.signingKey!.publicKey,
-                cryptoKey: keyset.encryptKey.publicKey,
+                cryptoKey: keyset.encryptKey!.publicKey,
             }, bytesToHex(this.dkxParent.signingParent.privateKey), this.content.for);
         } else {
             return nprivateChannelEncode({
                 type: 0,
                 docIndex: this.docIndex,
                 signingKey: keyset.signingKey!.publicKey,
-                cryptoKey: keyset.encryptKey.publicKey,
+                cryptoKey: keyset.encryptKey!.publicKey,
             }, this.content.password!);
         }
     }

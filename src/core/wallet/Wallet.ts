@@ -19,6 +19,7 @@ export class Wallet {
     store: IWalletStorage;
     isGuest = false;
     isInSession = false;
+    isExtensionManaged = false;
 
     ownerPubKey!: string;
     documentsIndex!: HDKIndex;
@@ -27,6 +28,7 @@ export class Wallet {
         this.ownerPubKey = args.publicKey;
         this.master = args.masterKey!;
         this.root = args.rootKey!;
+        this.documentsIndex = args.documentsIndex!;
         this.store = args.store;
         this.isGuest = args.isGuest
         this.isInSession = args.isInSession
@@ -38,22 +40,23 @@ export class Wallet {
             if (args.privateKey) {
                 this.setLockWords({ secret: args.privateKey! });
             }
-        } else if(this.master || this.root){
-            if (this.master) {
+        } else if (this.master || this.root) {
+            this.isExtensionManaged = this.root && !this.master;
+            if (!this.isExtensionManaged) {
                 this.root = this.master.derive(`m/44'/1237'/0'/1776'`);
+                if (args.privateKey || args.wordset) {
+                    this.setLockWords({ secret: args.privateKey, wordset: args.wordset });
+                }
             }
-            if (args.privateKey || args.wordset) {
-                this.setLockWords({ secret: args.privateKey, wordset: args.wordset });
-            }
+        }
+        if (!this.isExtensionManaged && this.wordset) {
+            const key1 = getReducedKey({ root: this.root, wordset: this.wordset.slice(0, 4) });
+            const key2 = getReducedKey({ root: this.root, wordset: this.wordset.slice(4, 8) });
+            this.documentsIndex = new HDKIndex(HDKIndexType.Sequential | HDKIndexType.Private, key1, key2, this.wordset.slice(8));
         }
         if (!this.isInSession && this.wordset) {
             this.store.save({ publicKey: this.ownerPubKey, masterKey: this.master, wordset: this.wordset });
             this.isInSession = true;
-        }
-        if (this.wordset) {
-            const key1 = getReducedKey({ root: this.root, wordset: this.wordset.slice(0, 4) });
-            const key2 = getReducedKey({ root: this.root, wordset: this.wordset.slice(4, 8) });
-            this.documentsIndex = new HDKIndex(HDKIndexType.Sequential | HDKIndexType.Private, key1, key2, this.wordset.slice(8));
         }
     }
 
@@ -112,9 +115,9 @@ export class Wallet {
             throw new Error('wordset and root key needed before createChannel().');
         }
         const index = this.channels.filter(x => x.ownerPubKey === this.ownerPubKey).length + 1;
-        const keyset = this.documentsIndex.getKeysFromIndex(index);
+        const keyset = this.documentsIndex.getDocumentKeyset(index);
         const channel = new PrivateChannel();
-        channel.setIndexKeys(keyset.signingKey!, keyset.encryptKey);
+        channel.setIndexKeys(keyset.signingKey!, keyset.encryptKey!);
         channel.nostrEvent = { pubkey: keyset.signingKey!.nostrPubKey } as NostrEventDocument;
         channel.docIndex = index;
         channel.ownerPubKey = this.ownerPubKey;

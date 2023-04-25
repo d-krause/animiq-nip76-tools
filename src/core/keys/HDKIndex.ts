@@ -17,14 +17,38 @@ export enum HDKIndexType {
     Singleton = 1 << 3,     // 1000
 }
 
-interface DocumentKeyset {
+export interface DocumentKeyset {
     signingKey?: HDKey;
-    encryptKey: HDKey
+    encryptKey?: HDKey
 }
 
+export interface DocumentKeysetDTO {
+    signingKey: string;
+    encryptKey: string;
+}
+
+export interface SequentialKeyset {
+    offset: number;
+    page: number;
+    keys: DocumentKeyset[];
+}
+
+export interface SequentialKeysetDTO {
+    offset: number;
+    page: number;
+    keys: DocumentKeysetDTO[];
+}
+export interface HDKIndexDTO {
+    type: HDKIndexType;
+    signingParent: string;
+    encryptParent: string;
+    wordset?: number[];
+    sequentialKeysets: SequentialKeysetDTO[];
+};
 
 export class HDKIndex {
     eventTag: string;
+    sequentialKeysets: SequentialKeyset[] = [];
     documents: ContentDocument[] = [];
     constructor(
         public type: HDKIndexType,
@@ -38,13 +62,14 @@ export class HDKIndex {
         if (this.isTimeBased && this.isSequential) {
             throw new Error('HDKIndex cannot be both Sequential and TimeBased.');
         }
-        if (this.isPrivate && !encryptParent.privateKey) {
-            throw new Error('privateKey is required on the cryptoParent when the type is Private.');
-        }
+        // if (this.isPrivate && !encryptParent.privateKey) {
+        //     throw new Error('privateKey is required on the cryptoParent when the type is Private.');
+        // }
         if (this.isPrivate && !this.wordset) {
             this.wordset = new Uint32Array((sha256(signingParent.privateKey)).buffer);
         }
-        this.eventTag = signingParent.deriveChildKey(0, this.isPrivate).deriveChildKey(0, this.isPrivate).pubKeyHash;
+        // this.eventTag = signingParent.deriveChildKey(0, this.isPrivate).deriveChildKey(0, this.isPrivate).pubKeyHash;
+        this.eventTag = signingParent.deriveChildKey(0).deriveChildKey(0).pubKeyHash;
     }
 
     get isPrivate(): boolean {
@@ -63,17 +88,27 @@ export class HDKIndex {
         return (this.type & HDKIndexType.Singleton) === HDKIndexType.Singleton;
     }
 
-    getKeysFromIndex(docIndex: number, privateKey?: string): DocumentKeyset {
+    getDocumentKeyset(docIndex: number, privateKey?: string): DocumentKeyset {
         let signingKey: HDKey | undefined = undefined;
-        let cryptoKey: HDKey;
+        let encryptKey: HDKey | undefined = undefined;
         if (this.isSingleton) {
             signingKey = this.signingParent;
-            cryptoKey = this.encryptParent;
-        } else if (this.isPrivate) {
+            encryptKey = this.encryptParent;
+        } else if (this.isSequential) {
             if (this.signingParent.privateKey) {
                 signingKey = getReducedKey({ root: this.signingParent, offset: docIndex, wordset: this.wordset!.slice(0, 4) });
+                encryptKey = getReducedKey({ root: this.encryptParent, offset: docIndex, wordset: this.wordset!.slice(4, 8) });
+            } else {
+                const sequentialKeyset = this.sequentialKeysets.find(x =>
+                    docIndex >= x.offset + (x.keys.length * x.page)
+                    && docIndex < x.offset + (x.keys.length * (x.page + 1))
+                );
+                if (sequentialKeyset) {
+                    const sqIndex = docIndex - sequentialKeyset.offset;
+                    signingKey = sequentialKeyset.keys[sqIndex].signingKey;
+                    encryptKey = sequentialKeyset.keys[sqIndex].encryptKey;
+                }
             }
-            cryptoKey = getReducedKey({ root: this.encryptParent, offset: docIndex, wordset: this.wordset!.slice(4, 8) });
         } else {
             if (privateKey) {
                 signingKey = new HDKey({
@@ -82,16 +117,16 @@ export class HDKIndex {
                     version: this.signingParent.version
                 }).deriveChildKey(docIndex, false);
             }
-            cryptoKey = this.encryptParent.deriveChildKey(docIndex!, false);
+            encryptKey = this.encryptParent.deriveChildKey(docIndex!, false);
         }
 
-        return { signingKey, encryptKey: cryptoKey };
+        return { signingKey, encryptKey };
     }
 
     async createDeleteEvent(doc: ContentDocument, privateKey: string): Promise<NostrEventDocument> {
 
         const cati = getCreatedAtIndexes();
-        const keyset = this.getKeysFromIndex(doc.docIndex, privateKey);
+        const keyset = this.getDocumentKeyset(doc.docIndex, privateKey);
         const event = nostrTools.getBlankEvent() as NostrEventDocument;
         event.tags = [['e', doc.nostrEvent.id]];
         event.created_at = cati.created_at;
@@ -116,8 +151,8 @@ export class HDKIndex {
         if (this.isTimeBased) {
             doc.docIndex = cati.index1;
         }
-        const keyset = this.getKeysFromIndex(doc.docIndex, privateKey);
-        const keydata = keyset.encryptKey.publicKey.slice(1);
+        const keyset = this.getDocumentKeyset(doc.docIndex, privateKey);
+        const keydata = keyset.encryptKey!.publicKey.slice(1);
         const content = new TextEncoder().encode(doc.serialize());
         const iv = randomBytes(16);
         const alg = { name: 'AES-GCM', iv, length: 256 } as AesKeyAlgorithm;
@@ -144,8 +179,8 @@ export class HDKIndex {
         try {
             const cati = getCreatedAtIndexes(event.created_at);
             const docIndex = this.isTimeBased ? cati.index1 : sequentialIndex!;
-            const keyset = this.getKeysFromIndex(docIndex!);
-            const keydata = keyset.encryptKey.publicKey.slice(1);
+            const keyset = this.getDocumentKeyset(docIndex!);
+            const keydata = keyset.encryptKey!.publicKey.slice(1);
             const encrypted = base64.decode(event.content);
             const iv = encrypted.slice(0, 16);
             const data = encrypted.slice(16);
@@ -162,13 +197,13 @@ export class HDKIndex {
     }
 
     private getDocumentFromJson(json: string, event: NostrEventDocument, keyset: DocumentKeyset, docIndex?: number): ContentDocument {
-        
+
         const kind = parseInt(json.match(/\d+/)![0]);
-        const doc = HDKIndex.getContentClass(kind);
+        const doc = HDKIndex.getContentDocument(kind);
         let existing = this.documents.find(x => x.nostrEvent?.pubkey === event.pubkey);
-        
-        if(doc instanceof PrivateChannel) {
-            (doc as PrivateChannel).setIndexKeys(keyset.signingKey!, keyset.encryptKey, existing as PrivateChannel);
+
+        if (doc instanceof PrivateChannel) {
+            (doc as PrivateChannel).setIndexKeys(keyset.signingKey!, keyset.encryptKey!, existing as PrivateChannel);
         }
 
         doc.deserialize(json);
@@ -193,30 +228,67 @@ export class HDKIndex {
         return doc;
     }
 
-    getDocKeys(start = 1, length = 20): string[] {
-        if (this.isSequential) {
-            return this.isPrivate
-                ? Array(length).fill(0).map((_, i) => getReducedKey({ root: this.signingParent, offset: i + start, wordset: this.wordset!.slice(0, 4) }).nostrPubKey)
-                : Array(length).fill(0).map((_, i) => this.signingParent.deriveChildKey(i + start).nostrPubKey);
-        } else {
-            return [];
+    getSequentialKeyset(offset = 0, page = 0): SequentialKeyset {
+        const rtn: SequentialKeyset = this.sequentialKeysets.find(x => x.page === page && x.offset === offset) || {
+            offset,
+            page,
+            keys: []
+        };
+        if (this.isSequential && this.signingParent.privateKey) {
+            if (rtn.keys.length === 0) {
+                const start = (page * 20) + offset;
+                rtn.keys = Array(20).fill({}).map((_, i) => {
+                    return {
+                        signingKey: getReducedKey({ root: this.signingParent, offset: i + start, wordset: this.wordset!.slice(0, 4) }),
+                        encryptKey: getReducedKey({ root: this.encryptParent, offset: i + start, wordset: this.wordset!.slice(4, 8) })
+                    };
+                });
+                this.sequentialKeysets.push(rtn);
+            }
         }
+        return rtn;
     }
 
-    toJSON(): { type: HDKIndexType, signingParent: string, encryptParent: string, wordset?: number[] } {
+    toJSON(): HDKIndexDTO {
+        let sequentialKeysetsDTO: SequentialKeysetDTO[] = [];
+        if (this.isSequential) {
+            sequentialKeysetsDTO = this.sequentialKeysets.map(sks => ({
+                offset: sks.offset,
+                page: sks.page,
+                keys: sks.keys.map(x => ({
+                    signingKey: x.signingKey!.extendedPublicKey,
+                    encryptKey: x.encryptKey!.extendedPublicKey
+                }))
+            }));
+        }
         return {
             type: this.type,
             signingParent: this.signingParent.extendedPrivateKey || this.signingParent.extendedPublicKey,
             encryptParent: this.encryptParent.extendedPrivateKey || this.encryptParent.extendedPublicKey,
-            wordset: this.wordset ? Array.from(this.wordset) : undefined
+            wordset: this.wordset ? Array.from(this.wordset) : undefined,
+            sequentialKeysets: sequentialKeysetsDTO
         };
     }
 
-    static fromJSON(jsonObj: { type: HDKIndexType, signingParent: string, encryptParent: string, wordset?: number[] }) {
+    static fromJSON(jsonObj: HDKIndexDTO): HDKIndex {
         const signingParent = HDKey.parseExtendedKey(jsonObj.signingParent);
         const encryptParent = HDKey.parseExtendedKey(jsonObj.encryptParent);
         const wordset = jsonObj.wordset ? Uint32Array.from(jsonObj.wordset) : undefined;
-        return new HDKIndex(jsonObj.type, signingParent, encryptParent, wordset);
+
+        const hdkIndex = new HDKIndex(jsonObj.type, signingParent, encryptParent, wordset);
+
+        if (hdkIndex.isSequential) {
+            hdkIndex.sequentialKeysets = jsonObj.sequentialKeysets.map(sks => ({
+                offset: sks.offset,
+                page: sks.page,
+                keys: sks.keys.map(x => ({
+                    signingKey: HDKey.parseExtendedKey(x.signingKey),
+                    encryptKey: HDKey.parseExtendedKey(x.encryptKey)
+                }))
+            }));
+        }
+
+        return hdkIndex;
     }
 
     static fromChannelPointer(pointer: PrivateChannelPointer): HDKIndex {
@@ -240,7 +312,7 @@ export class HDKIndex {
         return channel;
     }
 
-    static getContentClass(kind: number): ContentDocument {
+    static getContentDocument(kind: number): ContentDocument {
         switch (kind) {
             case NostrKinds.ChannelMetadata:
                 return new PrivateChannel();
