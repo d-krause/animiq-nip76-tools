@@ -50,6 +50,7 @@ export class HDKIndex {
     eventTag: string;
     sequentialKeysets: SequentialKeyset[] = [];
     documents: ContentDocument[] = [];
+    parentDocument?: ContentDocument;
     constructor(
         public type: HDKIndexType,
         public signingParent: HDKey,
@@ -68,7 +69,6 @@ export class HDKIndex {
         if (this.isPrivate && !this.wordset) {
             this.wordset = new Uint32Array((sha256(signingParent.privateKey)).buffer);
         }
-        // this.eventTag = signingParent.deriveChildKey(0, this.isPrivate).deriveChildKey(0, this.isPrivate).pubKeyHash;
         this.eventTag = signingParent.deriveChildKey(0).deriveChildKey(0).pubKeyHash;
     }
 
@@ -160,7 +160,7 @@ export class HDKIndex {
         const encrypted = new Uint8Array(await globalThis.crypto.subtle.encrypt(alg, key, content));
 
         const event = nostrTools.getBlankEvent() as NostrEventDocument;
-        event.tags = [['e', this.isSequential ? keyset.signingKey!.deriveChildKey(0, true).pubKeyHash : this.eventTag]];
+        event.tags = [['e', this.isSequential ? keyset.signingKey!.deriveChildKey(0).pubKeyHash : this.eventTag]];
         event.created_at = cati.created_at;
         event.kind = 17761;
         event.pubkey = keyset.signingKey!.nostrPubKey;

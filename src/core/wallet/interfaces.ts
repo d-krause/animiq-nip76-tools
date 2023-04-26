@@ -3,6 +3,7 @@ import { HDKey, HDKIndex } from '../keys';
 
 export interface IWalletStorage {
     clearSession(): void;
+    getDocumentsIndex(args: WalletConstructorArgs): HDKIndex;
     save(args: WalletStorageArgs): Promise<boolean>;
     load(publicKey: string, privateKey?: string): Promise<WalletConstructorArgs>;
 }
@@ -17,7 +18,5 @@ export interface WalletStorageArgs {
 export interface WalletConstructorArgs extends WalletStorageArgs {
     rootKey?: HDKey;
     documentsIndex?: HDKIndex;
-    store: IWalletStorage;
-    isGuest: boolean;
-    isInSession: boolean;
+    store?: IWalletStorage;
 }
