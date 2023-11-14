@@ -6,8 +6,8 @@ import { base64 } from '@scure/base';
 import { getPublicKey } from 'nostr-tools';
 import { HDKey, HDKIndex, HDKIndexType, Versions } from '../keys';
 import { getReducedKey } from '../util';
-import { Wallet, walletRsvpDocumentsOffset } from '../wallet/Wallet';
-import { IWalletStorage, WalletStorageArgs, WalletConstructorArgs } from './interfaces';
+import { KeyStore, keyStoreRsvpDocumentsOffset } from '../wallet/Wallet';
+import { KeyStoreStorage, KeyStoreStorageArgs, KeyStoreConstructorArgs } from './interfaces';
 
 function getCookie(name: string) {
     const value = `; ${document.cookie}`;
@@ -15,11 +15,11 @@ function getCookie(name: string) {
     if (parts.length === 2) return parts.pop()?.split(';').shift();
 }
 
-export class WebWalletStorage implements IWalletStorage {
+export class KeyStoreWebStorage implements KeyStoreStorage {
 
-    static backupKey = 'nip76-wallet';
-    static sessionKey = 'nip76-session';
-    static sessionIdName = 'nip76-session-id';
+    static backupKey = 'defy-backup';
+    static sessionKey = 'defy-session';
+    static sessionIdName = 'defy-session-id';
     static sessionExpireMinutes = 15;
 
     static async fromStorage(storageArgs: { publicKey?: string, privateKey?: string }) {
@@ -29,24 +29,24 @@ export class WebWalletStorage implements IWalletStorage {
         if (storageArgs.privateKey) {
             storageArgs.publicKey = getPublicKey(storageArgs.privateKey);
         }
-        const storage = new WebWalletStorage();
+        const storage = new KeyStoreWebStorage();
         const constructorArgs = await storage.load(storageArgs.publicKey!, storageArgs.privateKey);
-        const wallet = new Wallet(constructorArgs);
+        const wallet = new KeyStore(constructorArgs);
         wallet.documentsIndex = storage.getDocumentsIndex(constructorArgs)!;
         return wallet;
     }
 
     get isGuest() {
-        return !globalThis.localStorage.getItem(WebWalletStorage.backupKey);
+        return !globalThis.localStorage.getItem(KeyStoreWebStorage.backupKey);
     }
 
-    async save(args: WalletStorageArgs): Promise<boolean> {
-        const isSession = !args.privateKey && !!WebWalletStorage.sessionExpireMinutes;
+    async save(args: KeyStoreStorageArgs): Promise<boolean> {
+        const isSession = !args.privateKey && !!KeyStoreWebStorage.sessionExpireMinutes;
         if (!args.masterKey || (isSession && !args.masterKey && !args.wordset)) {
-            throw new Error('HD privateKey key needed for WebWalletStorage.save(). lockwords required for sessions.');
+            throw new Error('HD privateKey key needed for KeyStoreWebStorage.save(). lockwords required for sessions.');
         }
-        if (isSession && !WebWalletStorage.sessionExpireMinutes) {
-            throw new Error('Sessions have been disabled in WebWalletStorage.  To enable set sessionExpireMinutes to a non-zero value.');
+        if (isSession && !KeyStoreWebStorage.sessionExpireMinutes) {
+            throw new Error('Sessions have been disabled in KeyStoreWebStorage.  To enable set sessionExpireMinutes to a non-zero value.');
         }
         let storeSecret = isSession ? hexToBytes(this.createSession()) : sha256(hexToBytes(args.privateKey!));
         if (storeSecret) {
@@ -60,9 +60,9 @@ export class WebWalletStorage implements IWalletStorage {
             const encrypted = await window.crypto.subtle.encrypt(alg, secretKey, cryptoBuffer);
             const stored = base64.encode(concatBytes(iv, new Uint8Array(encrypted)));
             if (isSession) {
-                window.sessionStorage.setItem(WebWalletStorage.sessionKey, stored);
+                window.sessionStorage.setItem(KeyStoreWebStorage.sessionKey, stored);
             } else {
-                window.localStorage.setItem(WebWalletStorage.backupKey, stored);
+                window.localStorage.setItem(KeyStoreWebStorage.backupKey, stored);
             }
             return true;
         } else {
@@ -70,8 +70,8 @@ export class WebWalletStorage implements IWalletStorage {
         }
     }
 
-    async load(publicKey: string, privateKey?: string): Promise<WalletConstructorArgs> {
-        const rtn: WalletConstructorArgs = {
+    async load(publicKey: string, privateKey?: string): Promise<KeyStoreConstructorArgs> {
+        const rtn: KeyStoreConstructorArgs = {
             publicKey,
             privateKey,
             store: this,
@@ -81,16 +81,16 @@ export class WebWalletStorage implements IWalletStorage {
                 let storeData: string | null = null;
                 let storeSecret: Uint8Array | null = null;
                 if (privateKey) {
-                    storeData = window.localStorage.getItem(WebWalletStorage.backupKey);
+                    storeData = window.localStorage.getItem(KeyStoreWebStorage.backupKey);
                     storeSecret = sha256(hexToBytes(privateKey!));
                 } else {
-                    const cookie = getCookie(WebWalletStorage.sessionIdName);
-                    storeData = window.sessionStorage.getItem(WebWalletStorage.sessionKey);
+                    const cookie = getCookie(KeyStoreWebStorage.sessionIdName);
+                    storeData = window.sessionStorage.getItem(KeyStoreWebStorage.sessionKey);
                     if (cookie && cookie.match(/^[a-f0-9]{64}$/i)) {
                         storeSecret = hexToBytes(cookie);
                     } else if (storeData) {
-                        console.log('WebWalletStorage.load(): cleaning out old session')
-                        window.sessionStorage.removeItem(WebWalletStorage.sessionKey);
+                        console.log('KeyStoreWebStorage.load(): cleaning out old session')
+                        window.sessionStorage.removeItem(KeyStoreWebStorage.sessionKey);
                     }
                 }
                 if (storeData && storeSecret) {
@@ -108,13 +108,13 @@ export class WebWalletStorage implements IWalletStorage {
                     rtn.wordset = new Uint32Array(decrypted.slice(64).buffer);
                 }
             } catch (ex) {
-                console.error('WebWalletStorage.readKey() ex=', ex);
+                console.error('KeyStoreWebStorage.readKey() ex=', ex);
             }
         }
         return rtn;
     }
 
-    getDocumentsIndex(args: WalletConstructorArgs): HDKIndex {
+    getDocumentsIndex(args: KeyStoreConstructorArgs): HDKIndex {
         if (this.isGuest) {
             const randoms = new Uint8Array(256);
             window.crypto.getRandomValues(randoms);
@@ -132,7 +132,7 @@ export class WebWalletStorage implements IWalletStorage {
             const key2 = getReducedKey({ root: args.rootKey!, wordset: args.wordset.slice(4, 8) });
             args.documentsIndex = new HDKIndex(HDKIndexType.Sequential | HDKIndexType.Private, key1, key2, args.wordset.slice(8));
             args.documentsIndex.getSequentialKeyset(0, 0);
-            args.documentsIndex.getSequentialKeyset(walletRsvpDocumentsOffset, 0);
+            args.documentsIndex.getSequentialKeyset(keyStoreRsvpDocumentsOffset, 0);
         }
         if (args.privateKey && args.wordset) {
             this.save({ publicKey: args.publicKey, masterKey: args.masterKey, wordset: args.wordset });
@@ -141,7 +141,7 @@ export class WebWalletStorage implements IWalletStorage {
         return args.documentsIndex!;
     }
 
-    setLockWords(args: { secret?: string, wordset?: Uint32Array }) : Uint32Array {
+    setLockWords(args: { secret?: string, wordset?: Uint32Array }): Uint32Array {
         if (args.secret) {
             const secretHash = args.secret.match(/^[a-f0-9]$/) && args.secret.length % 2 === 0
                 ? sha512(hexToBytes(args.secret))
@@ -156,14 +156,14 @@ export class WebWalletStorage implements IWalletStorage {
 
     createSession() {
         const sessionKey = bytesToHex(window.crypto.getRandomValues(new Uint8Array(32)));
-        const expires = (new Date(Date.now() + WebWalletStorage.sessionExpireMinutes * 60000)).toUTCString();
-        document.cookie = `${WebWalletStorage.sessionIdName}=${sessionKey}; Secure; SameSite=Strict; expires=${expires}; path=/;`
+        const expires = (new Date(Date.now() + KeyStoreWebStorage.sessionExpireMinutes * 60000)).toUTCString();
+        document.cookie = `${KeyStoreWebStorage.sessionIdName}=${sessionKey}; Secure; SameSite=Strict; expires=${expires}; path=/;`
         return sessionKey;
     }
 
     clearSession() {
-        window.sessionStorage.removeItem(WebWalletStorage.sessionKey);
-        document.cookie = `${WebWalletStorage.sessionIdName}=1; Secure; SameSite=Strict; expires=0; path=/;`
+        window.sessionStorage.removeItem(KeyStoreWebStorage.sessionKey);
+        document.cookie = `${KeyStoreWebStorage.sessionIdName}=1; Secure; SameSite=Strict; expires=0; path=/;`
     }
 }
 

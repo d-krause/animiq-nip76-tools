@@ -43,7 +43,7 @@
   "peerDependencies": {
     "@noble/secp256k1": "^1.7",
     "@scure/base": "^1.1",
-    "nostr-tools": "^1.7.1",
+    "nostr-tools": "^1.7.4",
     "rxjs": "^7.0"
   },
   "dependencies": {

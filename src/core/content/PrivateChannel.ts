@@ -1,8 +1,5 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
-import * as nostrTools from 'nostr-tools';
-import { nprivateChannelEncode, PrivateChannelPointer } from '../../nostr-tools/nip19-extension';
-import { HDKey, HDKIndex, HDKIndexType, Versions } from '../keys';
-import { getCreatedAtIndexes } from '../util';
+import { HDKey, HDKIndex, HDKIndexType } from '../keys';
 import { ContentDocument, ContentTemplate } from './ContentDocument';
 import { Invitation } from './Invitation';
 import { PostDocument } from './PostDocument';
@@ -25,13 +22,16 @@ export class PrivateChannel extends ContentDocument {
 
     setIndexKeys(signingKey: HDKey, cryptoKey: HDKey, existing?: PrivateChannel) {
         this.dkxPost = new HDKIndex(HDKIndexType.TimeBased, signingKey, cryptoKey);
+        this.dkxPost.parentDocument = this;
         this.dkxRsvp = new HDKIndex(
             HDKIndexType.TimeBased,
             signingKey.deriveChildKey(0).deriveChildKey(0),
             cryptoKey.deriveChildKey(0).deriveChildKey(0)
         );
+        this.dkxRsvp.parentDocument = this;
         if (signingKey.privateKey && cryptoKey.privateKey) {
             this.dkxInvite = new HDKIndex(HDKIndexType.Sequential | HDKIndexType.Private, signingKey, cryptoKey);
+            this.dkxInvite.parentDocument = this;
         }
         if (existing) {
             // we just reloaded after editing, keeping the same documents arrays
@@ -42,7 +42,7 @@ export class PrivateChannel extends ContentDocument {
     }
 
     get posts(): PostDocument[] {
-        return (this.dkxPost.documents as PostDocument[]).filter(x => !x.ref && x.content.kind === nostrTools.Kind.Text);
+        return (this.dkxPost.documents as PostDocument[]).filter(x => !x.refId && x.content.kind === 1);
     }
 
     get invites(): Invitation[] {

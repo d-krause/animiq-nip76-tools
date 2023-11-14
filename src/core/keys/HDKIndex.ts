@@ -9,6 +9,7 @@ import { ContentDocument, Invitation, NostrEventDocument, NostrKinds, PostDocume
 import { getCreatedAtIndexes, getReducedKey } from '../util';
 import { HDKey } from './HDKey';
 import { Versions } from './Versions';
+import { Subject } from 'rxjs';
 
 export enum HDKIndexType {
     Private = 1,            // 0001
@@ -51,6 +52,13 @@ export class HDKIndex {
     sequentialKeysets: SequentialKeyset[] = [];
     documents: ContentDocument[] = [];
     parentDocument?: ContentDocument;
+
+    relays = [
+        { uri: 'wss://relay.damus.io', read: true, write: true },
+        { uri: 'wss://nostr.mom', read: true, write: true },
+        { uri: 'wss://relay.snort.social', read: true, write: true }
+    ];
+
     constructor(
         public type: HDKIndexType,
         public signingParent: HDKey,
@@ -223,7 +231,7 @@ export class HDKIndex {
             const i = this.documents.indexOf(existing);
             this.documents.splice(i, 1);
         }
-        this.documents = [...this.documents, doc].sort((a, b) => b.nostrEvent?.created_at - a.nostrEvent?.created_at);
+        this.documents = [...[], ...this.documents, doc].sort((a, b) => b.nostrEvent?.created_at - a.nostrEvent?.created_at);
 
         return doc;
     }
@@ -247,6 +255,41 @@ export class HDKIndex {
             }
         }
         return rtn;
+    }
+
+    static relayPool = new nostrTools.SimplePool();
+
+    queryRelays(start = 0, sequentialOffset = 0, subId: string): Subject<ContentDocument> {
+        const subject = new Subject<ContentDocument>();
+        const sequentialKeyset = this.sequentialKeysets[sequentialOffset];
+        const filter: nostrTools.Filter = { kinds: [17761] };
+        if (this.isSingleton) {
+            filter.authors = [this.signingParent.nostrPubKey];
+            filter.limit = 1;
+        } else if (this.isSequential) {
+            filter.authors = sequentialKeyset.keys.map(x => x.signingKey?.nostrPubKey!);
+            filter.limit = sequentialKeyset.keys.length;
+        } else {
+            filter['#e'] = [this.eventTag];
+            filter.limit = 100;
+        }
+        // const relayPool = new nostrTools.SimplePool();
+        const relays = this.relays.map(x => x.uri);
+        const sub = HDKIndex.relayPool.sub(relays, [filter], { id: subId });
+        sub.on('event', async (nostrEvent: NostrEventDocument) => {
+            const docIndex = this.isSequential
+                ? sequentialKeyset.keys.findIndex(x => x.signingKey?.nostrPubKey === nostrEvent.pubkey) + sequentialKeyset.offset + start
+                : undefined;
+            const doc = await this.readEvent(nostrEvent, docIndex);
+            if (doc) {
+                subject.next(doc);
+            }
+        });
+        sub.on('eose', () => {
+            sub.unsub();
+            subject.complete();
+        });
+        return subject;
     }
 
     toJSON(): HDKIndexDTO {

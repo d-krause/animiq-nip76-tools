@@ -1,22 +1,22 @@
 
 import { HDKey, HDKIndex } from '../keys';
 
-export interface IWalletStorage {
+export interface KeyStoreStorage {
     clearSession(): void;
-    getDocumentsIndex(args: WalletConstructorArgs): HDKIndex;
-    save(args: WalletStorageArgs): Promise<boolean>;
-    load(publicKey: string, privateKey?: string): Promise<WalletConstructorArgs>;
+    getDocumentsIndex(args: KeyStoreConstructorArgs): HDKIndex;
+    save(args: KeyStoreStorageArgs): Promise<boolean>;
+    load(publicKey: string, privateKey?: string): Promise<KeyStoreConstructorArgs>;
 }
 
-export interface WalletStorageArgs {
+export interface KeyStoreStorageArgs {
     publicKey: string;
     privateKey?: string;
     masterKey?: HDKey;
     wordset?: Uint32Array;
 }
 
-export interface WalletConstructorArgs extends WalletStorageArgs {
+export interface KeyStoreConstructorArgs extends KeyStoreStorageArgs {
     rootKey?: HDKey;
     documentsIndex?: HDKIndex;
-    store?: IWalletStorage;
+    store?: KeyStoreStorage;
 }

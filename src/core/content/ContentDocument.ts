@@ -17,6 +17,7 @@ export interface ContentTemplate {
 }
 
 export interface NostrEventDocument extends nostrTools.Event {
+    kind: nostrTools.Kind | number;
     contentCut: boolean;
     tagsCut: boolean;
 

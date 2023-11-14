@@ -4,35 +4,39 @@ import * as nostrTools from 'nostr-tools';
 import { NostrEventDocument, NostrKinds, PrivateChannel, Rsvp } from '../content';
 import { HDKIndex } from '../keys';
 import { getNowSeconds } from '../util';
-import { WalletConstructorArgs } from './interfaces';
-import { WebWalletStorage } from './WalletStorage';
+import { KeyStoreConstructorArgs } from './interfaces';
+import { KeyStoreWebStorage } from './WalletStorage';
 
-export const walletRsvpDocumentsOffset = 0x10000000;
+export const keyStoreRsvpDocumentsOffset = 0x10000000;
 
-export class Wallet {
+export class KeyStore {
 
-    private constructorArgs: WalletConstructorArgs;
+    private constructorArgs: KeyStoreConstructorArgs;
 
-    isInExtension = (globalThis as any).chrome && (globalThis as any).chrome.runtime && (globalThis as any).chrome.tabs;
+    isInExtension = Boolean((globalThis as any).chrome?.runtime && (globalThis as any).chrome?.tabs);
     ownerPubKey: string;
     documentsIndex: HDKIndex | undefined;
 
-    constructor(args: WalletConstructorArgs) {
+    constructor(args: KeyStoreConstructorArgs) {
         this.constructorArgs = args;
         this.ownerPubKey = args.publicKey;
         this.documentsIndex = args.documentsIndex;
     }
 
+    get isEmpty() {
+        return Boolean(this.constructorArgs.publicKey === undefined && this.constructorArgs.documentsIndex === undefined);
+    }
+
     get isExtensionManaged() {
-        return !!(globalThis as any).nostr?.nip76;
+        return Boolean((globalThis as any).nostr?.nip76);
     }
 
     get isReady() {
-        return !!this.documentsIndex;
+        return Boolean(this.documentsIndex);
     }
 
     get isGuest() {
-        return !this.isInExtension && !this.isExtensionManaged && !globalThis.localStorage.getItem(WebWalletStorage.backupKey);
+        return Boolean(!this.isInExtension && !this.isExtensionManaged && !globalThis.localStorage.getItem(KeyStoreWebStorage.backupKey));
     }
 
     get channels(): PrivateChannel[] {
@@ -56,7 +60,7 @@ export class Wallet {
         }
     }
 
-    async saveWallet(privateKey?: string) {
+    async save(privateKey?: string) {
         if (this.constructorArgs.store) {
             const saveArgs = {
                 privateKey,

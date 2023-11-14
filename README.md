@@ -20,13 +20,13 @@ Here we create the `pk` and `sk`, but you can use any key pair.   Currently only
 
 ```js
 import {generatePrivateKey, getPublicKey} from 'nostr-tools';
-import {Nip76WebWalletStorage} from 'animiq-nip76-tools';
+import {KeyStoreWebStorage} from 'animiq-nip76-tools';
 
 let sk = generatePrivateKey() // `sk` is a hex string
 let pk = getPublicKey(sk) // `pk` is a hex string
 
-const wallet = await Nip76WebWalletStorage.fromStorage({ ps, sk });
-await wallet.saveWallet(sk);
+const wallet = await KeyStoreWebStorage.fromStorage({ ps, sk });
+await wallet.save(sk);
 ```
 
 ### Creating New Private Channels

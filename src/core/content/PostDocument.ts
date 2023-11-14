@@ -1,6 +1,5 @@
 /*! animiq-nip76-tools - MIT License (c) 2023 David Krause (animiq.com) */
 
-import * as nostrTools from 'nostr-tools';
 import { ContentDocument, ContentTemplate, NostrKinds } from './ContentDocument';
 
 export interface IPostPayload extends ContentTemplate {
@@ -10,23 +9,26 @@ export interface IPostPayload extends ContentTemplate {
 export class PostDocument extends ContentDocument {
     override content!: IPostPayload;
 
-    get ref(): PostDocument | undefined {
-        if (this.content.tags && this.content.tags![0][0] === 'e') {
-            return this.dkxParent.documents.find(x => x.nostrEvent.id === this.content.tags![0][1]) as PostDocument;
-        }
+    get refId(): string | undefined {
+        return this.content.tags?.[0]?.[1];
     }
 
-    get replies(): PostDocument[] {
-            return (this.dkxParent.documents as PostDocument[]).filter(x => x.ref === this && x.content.kind === NostrKinds.Text);
+    getRef(): PostDocument | undefined {
+        return this.dkxParent.documents.find(x => x.nostrEvent.id === this.refId) as PostDocument;
     }
 
-
-    get reactions(): PostDocument[] {
-            return (this.dkxParent.documents as PostDocument[]).filter(x => x.ref === this && x.content.kind === NostrKinds.Reaction);
+    getReplies(): PostDocument[] {
+        return (this.dkxParent.documents as PostDocument[])
+            .filter(x => x.content.kind === 1 && x.refId === this.nostrEvent.id)
     }
 
-    get reactionTracker(): { [key: string | symbol]: number } {
-        return this.reactions.reduce((a: { [key: string | symbol]: number }, b: PostDocument) => {
+    getReactions(): PostDocument[] {
+        return (this.dkxParent.documents as PostDocument[])
+            .filter(x => x.content.kind === 7 && x.refId === this.nostrEvent.id)
+    }
+
+    getReactionTracker(): { [key: string | symbol]: number } {
+        return this.getReactions().reduce((a: { [key: string | symbol]: number }, b: PostDocument) => {
             const count = a[b.content.text!];
             a[b.content.text!] = count ? count + 1 : 1;
             return a;
