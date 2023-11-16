@@ -31,9 +31,19 @@ export class KeyStoreWebStorage implements KeyStoreStorage {
         }
         const storage = new KeyStoreWebStorage();
         const constructorArgs = await storage.load(storageArgs.publicKey!, storageArgs.privateKey);
-        const wallet = new KeyStore(constructorArgs);
-        wallet.documentsIndex = storage.getDocumentsIndex(constructorArgs)!;
-        return wallet;
+        const keyStore = new KeyStore(constructorArgs);
+        keyStore.documentsIndex = storage.getDocumentsIndex(constructorArgs)!;
+        return keyStore;
+    }
+
+    static createRandomKeyStore(): KeyStore {
+        const randoms = new Uint8Array(256);
+        window.crypto.getRandomValues(randoms);
+        const masterKey = HDKey.parseMasterSeed(randoms, Versions.nip76API1);
+        const args: KeyStoreConstructorArgs = { masterKey, publicKey: "" };
+        const storage = new KeyStoreWebStorage();
+        args.documentsIndex = storage.getDocumentsIndex(args);
+        return new KeyStore(args);
     }
 
     get isGuest() {
@@ -115,17 +125,16 @@ export class KeyStoreWebStorage implements KeyStoreStorage {
     }
 
     getDocumentsIndex(args: KeyStoreConstructorArgs): HDKIndex {
-        if (this.isGuest) {
-            const randoms = new Uint8Array(256);
-            window.crypto.getRandomValues(randoms);
-            args.masterKey = HDKey.parseMasterSeed(randoms, Versions.nip76API1);
-            args.rootKey = args.masterKey.derive(`m/44'/1237'/0'/1776'`);
-            args.wordset = this.setLockWords({ secret: args.privateKey || ' ' });
-        } else if (args.masterKey) {
-            args.rootKey = args.masterKey.derive(`m/44'/1237'/0'/1776'`);
-            if (args.privateKey || args.wordset) {
-                args.wordset = this.setLockWords({ secret: args.privateKey, wordset: args.wordset });
-            }
+        if (!(args.masterKey || (args.wordset && args.rootKey))) {
+            throw new Error('Either a masterKey or rootKey+wordset is required to create a documentsIndex.');
+        }
+        if (args.masterKey) {
+            args.publicKey = args.masterKey.derive("m/44'/1237'/0'/0/0").nostrPubKey
+            args.privateKey = args.masterKey.derive("m/44'/1237'/0'/0/0").hexPrivKey!
+            args.rootKey = args.masterKey.derive(`m/44'/1237'/0'/1776'/0'`);
+            const wordsetKey = args.masterKey.derive(`m/44'/1237'/0'/1776'/1'`);
+            const wordsetHash = sha512(wordsetKey.privateKey);
+            args.wordset = new Uint32Array((wordsetHash).buffer);
         }
         if (args.wordset) {
             const key1 = getReducedKey({ root: args.rootKey!, wordset: args.wordset.slice(0, 4) });
@@ -134,25 +143,24 @@ export class KeyStoreWebStorage implements KeyStoreStorage {
             args.documentsIndex.getSequentialKeyset(0, 0);
             args.documentsIndex.getSequentialKeyset(keyStoreRsvpDocumentsOffset, 0);
         }
-        if (args.privateKey && args.wordset) {
-            this.save({ publicKey: args.publicKey, masterKey: args.masterKey, wordset: args.wordset });
-        }
-
+        // if (args.privateKey && args.wordset) {
+        //     this.save({ publicKey: args.publicKey, masterKey: args.masterKey, wordset: args.wordset });
+        // }
         return args.documentsIndex!;
     }
 
-    setLockWords(args: { secret?: string, wordset?: Uint32Array }): Uint32Array {
-        if (args.secret) {
-            const secretHash = args.secret.match(/^[a-f0-9]$/) && args.secret.length % 2 === 0
-                ? sha512(hexToBytes(args.secret))
-                : sha512(new TextEncoder().encode(args.secret));
-            return new Uint32Array((secretHash).buffer);
-        } else if (args.wordset && args.wordset.length === 16) {
-            return args.wordset;
-        } else {
-            throw new Error('16 lockwords or a secret to generate them is required to setLockwords().');
-        }
-    }
+    // setLockWords(args: { secret?: string, wordset?: Uint32Array }): Uint32Array {
+    //     if (args.secret) {
+    //         const secretHash = args.secret.match(/^[a-f0-9]$/) && args.secret.length % 2 === 0
+    //             ? sha512(hexToBytes(args.secret))
+    //             : sha512(new TextEncoder().encode(args.secret));
+    //         return new Uint32Array((secretHash).buffer);
+    //     } else if (args.wordset && args.wordset.length === 16) {
+    //         return args.wordset;
+    //     } else {
+    //         throw new Error('16 lockwords or a secret to generate them is required to setLockwords().');
+    //     }
+    // }
 
     createSession() {
         const sessionKey = bytesToHex(window.crypto.getRandomValues(new Uint8Array(32)));

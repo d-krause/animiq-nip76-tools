@@ -15,12 +15,14 @@ export class KeyStore {
 
     isInExtension = Boolean((globalThis as any).chrome?.runtime && (globalThis as any).chrome?.tabs);
     ownerPubKey: string;
+    ownerNpub?: string;
     documentsIndex: HDKIndex | undefined;
 
     constructor(args: KeyStoreConstructorArgs) {
         this.constructorArgs = args;
-        this.ownerPubKey = args.publicKey;
         this.documentsIndex = args.documentsIndex;
+        this.ownerPubKey = args.publicKey;
+        if(args.publicKey) this.ownerNpub = nostrTools.nip19.npubEncode(args.publicKey);
     }
 
     get isEmpty() {
